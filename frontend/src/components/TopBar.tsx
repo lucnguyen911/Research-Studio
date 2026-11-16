@@ -1,6 +1,5 @@
 import React from 'react';
 import type { ScreenId } from '../prototype/types';
-import { DEMO_RSS_ARTICLES, DEMO_VIDEOS } from '../prototype/demoData';
 import { useAppNavigation } from '../state/navigationStore';
 import { isDemoPreviewScreen, usePrototypeWorkspace } from '../state/workspaceContext';
 
@@ -38,6 +37,7 @@ export const TopBar: React.FC = () => {
     systemSettings,
     quotaStatus,
     projects,
+    cachedVideosById,
     channels,
     ideas,
   } = usePrototypeWorkspace();
@@ -71,9 +71,8 @@ export const TopBar: React.FC = () => {
       ];
     }
     if (sid === 'video-detail') {
-      const vid = DEMO_VIDEOS.find((v) => v.id === currentEntry.params.videoId);
+      const vid = currentEntry.params.videoId ? cachedVideosById[currentEntry.params.videoId] : undefined;
       const fromChId = currentEntry.params.fromChannelId ?? vid?.channelId;
-      const ch = channels.find((c) => c.id === fromChId);
       const crumbs: Array<{ label: string; onClick?: () => void }> = [];
       if (currentEntry.params.fromScreen === 'global-trends' || currentEntry.params.fromScreen === 'global-search') {
         crumbs.push({
@@ -85,21 +84,20 @@ export const TopBar: React.FC = () => {
           label: 'Theo dõi đối thủ',
           onClick: () => navigate('project-competitors'),
         });
-        if (ch) {
+        if (fromChId) {
           crumbs.push({
-            label: ch.title,
-            onClick: () => navigate('channel-detail', { params: { channelId: ch.id } }),
+            label: vid?.channelTitle || 'Chi tiết kênh',
+            onClick: () => navigate('channel-detail', { params: { channelId: fromChId } }),
           });
         }
       }
-      crumbs.push({ label: 'Chi tiết video' });
+      crumbs.push({ label: vid?.title || 'Chi tiết video' });
       return crumbs;
     }
     if (sid === 'article-detail') {
-      const art = DEMO_RSS_ARTICLES.find((a) => a.id === currentEntry.params.articleId);
       return [
         { label: 'Tin tức & thảo luận', onClick: () => navigate('global-news') },
-        { label: art?.feedName ?? 'Chi tiết bài báo' },
+        { label: 'Chi tiết bài báo RSS' },
       ];
     }
     if (sid === 'idea-detail') {

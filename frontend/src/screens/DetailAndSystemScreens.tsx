@@ -1,60 +1,123 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  DEMO_RSS_ARTICLES,
-  DEMO_VIDEOS,
-  IDEA_STATUS_LABELS,
-  formatInt,
-} from '../prototype/demoData';
+  ApiClientError,
+  fetchChannelDetailApi,
+  fetchRssArticleDetailApi,
+  fetchVideoDetailApi,
+  isAbortError,
+  updateRssArticleApi,
+} from '../api/client';
+import { formatDateTimeVi, mapYoutubeVideoDtoToItem } from '../api/mappers';
+import type {
+  ChannelDetailResponseDto,
+  RssArticleDto,
+  VideoDetailResponseDto,
+} from '../api/types';
+import { IDEA_STATUS_LABELS, formatInt } from '../prototype/demoData';
 import type { IdeaStatus } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
 import { usePrototypeWorkspace } from '../state/workspaceContext';
 import { FormatBadgeGroup } from '../components/FormatBadgeGroup';
 import { ConfirmDeleteModal } from '../components/Modals';
 import { SparklineCell } from '../components/SparklineCell';
-import { GlobalModeBanners, LoadingSkeletonCard } from '../components/StatusViews';
+import { EmptyStateCard, GlobalModeBanners, LoadingSkeletonCard } from '../components/StatusViews';
 import { VideoResearchTable } from '../components/VideoResearchTable';
 
 export const ChannelDetailScreen: React.FC = () => {
   const { currentEntry, goBack, navigate } = useAppNavigation();
-  const { channels, projects, uiMode, apiCachePurged } = usePrototypeWorkspace();
+  const { registerVideosInMemory } = usePrototypeWorkspace();
+  const channelId = currentEntry.params.channelId ?? '';
 
-  const channel = channels.find((c) => c.id === currentEntry.params.channelId) ?? channels[0];
-  if (!channel) {
+  const [state, setState] = useState<{
+    key: string;
+    detail: ChannelDetailResponseDto | null;
+    error: string | null;
+  }>({ key: '', detail: null, error: null });
+
+  useEffect(() => {
+    if (!channelId) return undefined;
+    const controller = new AbortController();
+    fetchChannelDetailApi(channelId, controller.signal)
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        registerVideosInMemory(res.videos.map(mapYoutubeVideoDtoToItem));
+        setState({ key: channelId, detail: res, error: null });
+      })
+      .catch((err) => {
+        if (isAbortError(err) || controller.signal.aborted) return;
+        setState({
+          key: channelId,
+          detail: null,
+          error: err instanceof ApiClientError ? err.message : 'Không tải được Chi tiết kênh từ SQLite.',
+        });
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [channelId, registerVideosInMemory]);
+
+  if (!channelId) {
     return (
       <div className="rs-container">
-        <button type="button" className="rs-btn rs-btn-secondary" onClick={goBack}>
-          ← Quay lại
-        </button>
+        <EmptyStateCard
+          title="Thiếu mã kênh YouTube"
+          description="Vui lòng chọn một kênh từ Khám phá xu hướng, Tìm kiếm hoặc Theo dõi đối thủ."
+          actionLabel="Quay lại"
+          onAction={goBack}
+        />
       </div>
     );
   }
 
-  const channelVideos =
-    uiMode === 'empty' || apiCachePurged ? [] : DEMO_VIDEOS.filter((v) => v.channelId === channel.id);
+  if (state.key !== channelId && state.error === null) {
+    return (
+      <div className="rs-container">
+        <LoadingSkeletonCard label="Đang tải Chi tiết kênh từ SQLite..." />
+      </div>
+    );
+  }
+
+  if (state.error || !state.detail) {
+    return (
+      <div className="rs-container">
+        <EmptyStateCard
+          title="Không đọc được thông tin kênh"
+          description={state.error ?? 'Kênh không tồn tại hoặc đã bị xóa khỏi bộ nhớ đệm.'}
+          actionLabel="← Quay lại"
+          onAction={goBack}
+        />
+      </div>
+    );
+  }
+
+  const { channel, videos, linkedProjects } = state.detail;
+  const videoItems = videos.map(mapYoutubeVideoDtoToItem);
+  const channelExternalUrl = channel.handle
+    ? `https://www.youtube.com/${channel.handle.startsWith('@') ? channel.handle : `@${channel.handle}`}`
+    : `https://www.youtube.com/channel/${channel.channelId}`;
 
   return (
     <div className="rs-container">
       <div className="rs-page-header">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <h1 className="rs-page-title">Chi tiết kênh: {channel.title}</h1>
-            <span className="rs-badge">{channel.handle}</span>
-            <span className="rs-badge">Hạn cache &lt;= 30 ngày</span>
+            <h1 className="rs-page-title">
+              Chi tiết kênh: {channel.title ?? channel.channelId}
+            </h1>
+            {channel.handle && <span className="rs-badge">{channel.handle}</span>}
+            <span className={`rs-badge ${channel.hasValidApiData ? 'rs-badge-success' : 'rs-badge-warning'}`}>
+              {channel.hasValidApiData ? 'Hạn cache <= 30 ngày' : 'Metadata API đã hết hạn 30 ngày'}
+            </span>
           </div>
           <p className="rs-page-subtitle">
-            Cập nhật gần nhất: {channel.lastFetchedAt} · Bấm tên video bên dưới để mở Chi tiết video (Cấp 4)
+            Cập nhật gần nhất: {formatDateTimeVi(channel.apiFetchedAt)} · Dữ liệu gốc YouTube Data API
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" className="rs-btn rs-btn-secondary" onClick={() => navigate('project-competitors')}>
-            ← Danh sách đối thủ
+          <button type="button" className="rs-btn rs-btn-secondary" onClick={goBack}>
+            ← Quay lại
           </button>
-          <a
-            className="rs-btn rs-btn-tinted"
-            href={`https://www.youtube.com/${channel.handle}`}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a className="rs-btn rs-btn-tinted" href={channelExternalUrl} target="_blank" rel="noreferrer">
             Mở kênh trên YouTube ↗
           </a>
         </div>
@@ -76,29 +139,35 @@ export const ChannelDetailScreen: React.FC = () => {
           </div>
         </div>
         <div className="rs-card">
-          <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>Project đang cùng theo dõi kênh này</div>
+          <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>Project đang theo dõi kênh này</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-            {channel.projectIds.map((pid) => {
-              const p = projects.find((pr) => pr.id === pid);
-              return (
-                <span key={pid} className="rs-badge rs-badge-demo">
-                  {p?.name ?? pid}
-                </span>
-              );
-            })}
+            {linkedProjects.length === 0 ? (
+              <span style={{ fontSize: '13px', color: 'var(--rs-text-muted)' }}>Chưa gắn vào Project đối thủ nào</span>
+            ) : (
+              linkedProjects.map((lp) => (
+                <button
+                  key={lp.projectId}
+                  type="button"
+                  className="rs-badge"
+                  onClick={() => navigate('project-overview', { projectId: lp.projectId })}
+                >
+                  {lp.projectName}
+                </button>
+              ))
+            )}
           </div>
         </div>
       </div>
 
       <h2 style={{ margin: '4px 0 0', fontSize: '16px' }}>
-        Danh sách video đã thu thập của kênh ({channelVideos.length} video)
+        Video còn hạn cache &lt;= 30 ngày của kênh ({videoItems.length} video)
       </h2>
 
       <VideoResearchTable
-        videos={channelVideos}
+        videos={videoItems}
         fromScreen="channel-detail"
-        fromChannelId={channel.id}
-        pageSize={4}
+        fromChannelId={channel.channelId}
+        pageSize={6}
         showChannelFilter={false}
         showSnapshotsColumn
         projectIdForBreakout={currentEntry.projectId ?? undefined}
@@ -111,22 +180,85 @@ export const VideoDetailScreen: React.FC = () => {
   const { currentEntry, goBack, navigate } = useAppNavigation();
   const {
     projects,
-    ideas,
     breakoutByProject,
     toggleBreakoutFlag,
     setBreakoutNote,
     openSaveIdeaModal,
-    updateProjectIdeaStatus,
-    uiMode,
+    registerVideosInMemory,
   } = usePrototypeWorkspace();
 
-  const video = DEMO_VIDEOS.find((v) => v.id === currentEntry.params.videoId) ?? DEMO_VIDEOS[0];
+  const videoId = currentEntry.params.videoId ?? '';
   const activeProject = projects.find((p) => p.id === currentEntry.projectId) ?? projects[0] ?? null;
-  const breakoutEntry = activeProject ? breakoutByProject[activeProject.id]?.[video.id] : undefined;
+  const reqKey = `${videoId}:${activeProject?.id ?? ''}`;
+
+  const [state, setState] = useState<{
+    key: string;
+    detail: VideoDetailResponseDto | null;
+    error: string | null;
+  }>({ key: '', detail: null, error: null });
+
+  const breakoutEntry = activeProject && videoId ? breakoutByProject[activeProject.id]?.[videoId] : undefined;
   const [noteDraft, setNoteDraft] = useState(breakoutEntry?.note ?? '');
 
-  const snapshotPoints = uiMode === 'insufficient_data' ? video.snapshots30d.slice(-1) : video.snapshots30d;
-  const linkedIdeas = ideas.filter((i) => i.sourceRefId === video.id);
+  useEffect(() => {
+    if (!videoId) return undefined;
+    const controller = new AbortController();
+    fetchVideoDetailApi(videoId, activeProject?.id ?? null, controller.signal)
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        registerVideosInMemory([mapYoutubeVideoDtoToItem(res.video)]);
+        setState({ key: reqKey, detail: res, error: null });
+      })
+      .catch((err) => {
+        if (isAbortError(err) || controller.signal.aborted) return;
+        setState({
+          key: reqKey,
+          detail: null,
+          error: err instanceof ApiClientError ? err.message : 'Không tải được Chi tiết video từ SQLite.',
+        });
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [videoId, activeProject?.id, reqKey, registerVideosInMemory]);
+
+  if (!videoId) {
+    return (
+      <div className="rs-container">
+        <EmptyStateCard
+          title="Thiếu mã Video YouTube"
+          description="Vui lòng chọn một video từ danh sách nghiên cứu để mở Chi tiết Video."
+          actionLabel="Quay lại"
+          onAction={goBack}
+        />
+      </div>
+    );
+  }
+
+  if (state.key !== reqKey && state.error === null) {
+    return (
+      <div className="rs-container">
+        <LoadingSkeletonCard label="Đang tải Chi tiết Video từ SQLite..." />
+      </div>
+    );
+  }
+
+  if (state.error || !state.detail) {
+    return (
+      <div className="rs-container">
+        <EmptyStateCard
+          title="Không tìm thấy video yêu cầu"
+          description={state.error ?? 'Video chưa được lưu trên SQLite hoặc đã bị xóa cache.'}
+          actionLabel="← Quay lại"
+          onAction={goBack}
+        />
+      </div>
+    );
+  }
+
+  const { video: dto, linkedIdeas } = state.detail;
+  const video = mapYoutubeVideoDtoToItem(dto);
+  const snapshots = video.snapshots30d;
 
   return (
     <div className="rs-container">
@@ -135,19 +267,26 @@ export const VideoDetailScreen: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <h1 className="rs-page-title">Chi tiết Video (Standard Mode)</h1>
             <span className="rs-badge">Lấy từ API: {video.apiFetchedAt}</span>
-            <span className="rs-badge">Hết hạn 30 ngày: {video.apiExpiresAt}</span>
+            <span className={`rs-badge ${dto.hasValidApiData ? 'rs-badge-success' : 'rs-badge-warning'}`}>
+              {dto.hasValidApiData ? `Hết hạn 30 ngày: ${video.apiExpiresAt}` : 'Metadata API đã hết hạn 30 ngày'}
+            </span>
           </div>
           <p className="rs-page-subtitle">
-            Kênh:{' '}
-            <button
-              type="button"
-              className="rs-crumb-btn"
-              style={{ fontWeight: 700, padding: 0 }}
-              onClick={() => navigate('channel-detail', { params: { channelId: video.channelId } })}
-            >
-              {video.channelTitle}
-            </button>{' '}
-            · Xuất bản: {video.publishedAt} · Thời lượng: {video.durationDisplay}
+            {dto.channelId ? (
+              <>
+                Kênh:{' '}
+                <button
+                  type="button"
+                  className="rs-crumb-btn"
+                  style={{ fontWeight: 700, padding: 0 }}
+                  onClick={() => navigate('channel-detail', { params: { channelId: dto.channelId! } })}
+                >
+                  {video.channelTitle}
+                </button>{' '}
+                ·{' '}
+              </>
+            ) : null}
+            Xuất bản: {video.publishedAt} · Thời lượng: {video.durationDisplay}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -164,6 +303,15 @@ export const VideoDetailScreen: React.FC = () => {
           </a>
         </div>
       </div>
+
+      {!dto.hasValidApiData && (
+        <div className="rs-banner rs-banner-warn" role="status">
+          <div>
+            <strong>Dữ liệu YouTube API của video này đã quá hạn 30 ngày và được xóa sạch theo chính sách:</strong> Nhãn
+            định dạng thủ công, Ghi chú và Ý tưởng liên kết của bạn vẫn được giữ nguyên 100%.
+          </div>
+        </div>
+      )}
 
       <div className="rs-detail-layout">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -196,12 +344,12 @@ export const VideoDetailScreen: React.FC = () => {
               </div>
             </div>
             <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
-              Chỉ hiển thị số liệu YouTube API nguyên bản. Không hiển thị Outlier Multiplier hay tỷ lệ Engagement.
+              Chỉ hiển thị số liệu YouTube API nguyên bản. Không tính Outlier Multiplier hay tỷ lệ Engagement.
             </div>
           </section>
 
           <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <h2 style={{ margin: 0, fontSize: '15.5px' }}>Phân loại định dạng 3 lớp (Không gộp ngầm)</h2>
+            <h2 style={{ margin: 0, fontSize: '15.5px' }}>Phân loại định dạng 3 lớp (Lưu SQLite tách biệt nguồn)</h2>
             <FormatBadgeGroup video={video} />
           </section>
 
@@ -211,48 +359,59 @@ export const VideoDetailScreen: React.FC = () => {
                 Các mốc viewCount thô &lt;= 30 ngày (Kèm đúng timestamp thu thập)
               </h2>
               <SparklineCell
-                points={snapshotPoints.map((s) => s.viewCount)}
-                labels={snapshotPoints.map((s) => s.capturedAt)}
-                badgeLabel={`${snapshotPoints.length} mốc trong cache`}
+                points={snapshots.map((s) => s.viewCount)}
+                labels={snapshots.map((s) => s.capturedAt)}
+                badgeLabel={`${snapshots.length} mốc trong cache`}
                 directionLabel={
-                  snapshotPoints.length >= 2
-                    ? `↗ +${formatInt(snapshotPoints[snapshotPoints.length - 1].viewCount - snapshotPoints[0].viewCount)}`
-                    : '1 mốc'
+                  snapshots.length >= 2
+                    ? `↗ +${formatInt(snapshots[snapshots.length - 1].viewCount - snapshots[0].viewCount)}`
+                    : snapshots.length === 1
+                      ? '1 mốc'
+                      : '0 mốc'
                 }
                 tooltipTitle="Chuỗi mốc thô <= 30 ngày"
                 tooltipDetail="Không lưu quá 30 ngày lịch và không tính vận tốc Views/ngày."
+                insufficientText="Chưa đủ mốc thu thập"
               />
             </div>
 
-            <div className="rs-table-wrap">
-              <table className="rs-table">
-                <thead>
-                  <tr>
-                    <th>Thời điểm thu thập</th>
-                    <th className="rs-num-cell">viewCount gốc</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshotPoints.map((pt) => (
-                    <tr key={pt.capturedAt}>
-                      <td className="rs-mono">{pt.capturedAt}</td>
-                      <td className="rs-num-cell" style={{ fontWeight: 700 }}>
-                        {formatInt(pt.viewCount)}
-                      </td>
+            {snapshots.length > 0 && (
+              <div className="rs-table-wrap">
+                <table className="rs-table">
+                  <thead>
+                    <tr>
+                      <th>Thời điểm thu thập</th>
+                      <th className="rs-num-cell">viewCount gốc</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {snapshots.map((pt) => (
+                      <tr key={pt.capturedAt}>
+                        <td className="rs-mono">{pt.capturedAt}</td>
+                        <td className="rs-num-cell" style={{ fontWeight: 700 }}>
+                          {formatInt(pt.viewCount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             <div>
-              <div style={{ fontSize: '12.5px', fontWeight: 600, marginBottom: 6 }}>Thẻ <code>snippet.tags</code> gốc từ YouTube API:</div>
+              <div style={{ fontSize: '12.5px', fontWeight: 600, marginBottom: 6 }}>
+                Thẻ <code>snippet.tags</code> gốc từ YouTube API:
+              </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {video.tags.map((tag) => (
-                  <span key={tag} className="rs-badge">
-                    #{tag}
-                  </span>
-                ))}
+                {video.tags.length === 0 ? (
+                  <span style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>Không có thẻ tags khả dụng.</span>
+                ) : (
+                  video.tags.map((tag) => (
+                    <span key={tag} className="rs-badge">
+                      #{tag}
+                    </span>
+                  ))
+                )}
               </div>
             </div>
           </section>
@@ -270,7 +429,7 @@ export const VideoDetailScreen: React.FC = () => {
                 {breakoutEntry?.flagged ? '★ Đang gắn cờ Video Bứt phá' : '☆ Đánh dấu là Video Bứt phá'}
               </button>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: '13px', fontWeight: 600 }}>Ghi chú phân tích riêng của Project (lưu vĩnh viễn)</span>
+                <span style={{ fontSize: '13px', fontWeight: 600 }}>Ghi chú phân tích riêng (nối SQLite ở M5)</span>
                 <textarea
                   className="rs-textarea"
                   value={noteDraft}
@@ -283,14 +442,14 @@ export const VideoDetailScreen: React.FC = () => {
                 className="rs-btn rs-btn-secondary"
                 onClick={() => setBreakoutNote(activeProject.id, video.id, noteDraft)}
               >
-                Lưu ghi chú Project
+                Lưu ghi chú tạm
               </button>
             </section>
           )}
 
           <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ margin: 0, fontSize: '15.5px' }}>Ý tưởng gắn từ video này</h2>
+              <h2 style={{ margin: 0, fontSize: '15.5px' }}>Ý tưởng gắn từ video này ({linkedIdeas.length})</h2>
               <button
                 type="button"
                 className="rs-btn rs-btn-sm rs-btn-primary"
@@ -314,7 +473,7 @@ export const VideoDetailScreen: React.FC = () => {
               </span>
             ) : (
               linkedIdeas.map((idea) => (
-                <div key={idea.id} className="rs-card-subtle" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div key={idea.id} className="rs-card-subtle">
                   <button
                     type="button"
                     className="rs-title-link"
@@ -322,26 +481,6 @@ export const VideoDetailScreen: React.FC = () => {
                   >
                     {idea.title}
                   </button>
-                  {Object.entries(idea.projectLinks).map(([pid, link]) => {
-                    const pr = projects.find((p) => p.id === pid);
-                    return (
-                      <div key={pid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: '12.5px' }}>{pr?.name ?? pid}</span>
-                        <select
-                          aria-label={`Đổi trạng thái cho ${pr?.name ?? pid}`}
-                          className="rs-select rs-select-compact"
-                          value={link.status}
-                          onChange={(e) => updateProjectIdeaStatus(idea.id, pid, e.target.value as IdeaStatus)}
-                        >
-                          {(Object.keys(IDEA_STATUS_LABELS) as IdeaStatus[]).map((st) => (
-                            <option key={st} value={st}>
-                              {IDEA_STATUS_LABELS[st]}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    );
-                  })}
                 </div>
               ))
             )}
@@ -352,10 +491,35 @@ export const VideoDetailScreen: React.FC = () => {
   );
 };
 
-export const ArticleDetailScreen: React.FC = () => {
-  const { currentEntry, goBack } = useAppNavigation();
-  const { openSaveIdeaModal } = usePrototypeWorkspace();
-  const article = DEMO_RSS_ARTICLES.find((a) => a.id === currentEntry.params.articleId) ?? DEMO_RSS_ARTICLES[0];
+const ArticleDetailBody: React.FC<{
+  initialArticle: RssArticleDto;
+  onUpdated: (next: RssArticleDto) => void;
+}> = ({ initialArticle, onUpdated }) => {
+  const { goBack } = useAppNavigation();
+  const { openSaveIdeaModal, pushToast } = usePrototypeWorkspace();
+  const [article, setArticle] = useState(initialArticle);
+  const [notesDraft, setNotesDraft] = useState(initialArticle.userNotes);
+  const [saving, setSaving] = useState(false);
+
+  const safeExternalUrl =
+    article.canonicalUrl.startsWith('https://') || article.canonicalUrl.startsWith('http://')
+      ? article.canonicalUrl
+      : '';
+
+  const handleSaveNotesOrBookmark = (patch: { bookmarked?: boolean; userNotes?: string }) => {
+    setSaving(true);
+    void updateRssArticleApi(article.id, patch)
+      .then((updated) => {
+        setArticle(updated);
+        setNotesDraft(updated.userNotes);
+        onUpdated(updated);
+        pushToast('success', 'Đã lưu thông tin bài báo RSS vào SQLite (lưu bền vững ngoại tuyến).');
+      })
+      .catch((err) => {
+        pushToast('error', err instanceof ApiClientError ? err.message : 'Không lưu được bài báo RSS.');
+      })
+      .finally(() => setSaving(false));
+  };
 
   return (
     <div className="rs-container">
@@ -363,15 +527,23 @@ export const ArticleDetailScreen: React.FC = () => {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <h1 className="rs-page-title">Chi tiết bài báo RSS</h1>
-            <span className="rs-badge rs-badge-success">Nguồn: RSS (Dữ liệu ngoài YouTube)</span>
+            <span className="rs-badge rs-badge-success">{article.sourceLabel}</span>
           </div>
           <p className="rs-page-subtitle">
-            {article.feedName} · Xuất bản: {article.publishedAt} · Hiển thị văn bản thuần an toàn chống XSS
+            {article.feedName} · Xuất bản: {formatDateTimeVi(article.publishedAt ?? article.fetchedAt)} · Văn bản thuần an toàn chống XSS
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" className="rs-btn rs-btn-secondary" onClick={goBack}>
             ← Quay lại
+          </button>
+          <button
+            type="button"
+            className="rs-btn rs-btn-secondary"
+            disabled={saving}
+            onClick={() => handleSaveNotesOrBookmark({ bookmarked: !article.bookmarked })}
+          >
+            {article.bookmarked ? '★ Đã đánh dấu' : '☆ Đánh dấu bài'}
           </button>
           <button
             type="button"
@@ -382,8 +554,8 @@ export const ArticleDetailScreen: React.FC = () => {
                 sourceType: 'rss_article',
                 sourceRefId: article.id,
                 sourceTitleSnapshot: article.title,
-                sourceUrl: article.url,
-                tags: article.tags,
+                sourceUrl: safeExternalUrl,
+                tags: [article.feedName],
               })
             }
           >
@@ -395,15 +567,109 @@ export const ArticleDetailScreen: React.FC = () => {
       <article className="rs-card" style={{ maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <h2 style={{ margin: 0, fontSize: '19px', lineHeight: 1.35 }}>{article.title}</h2>
         <p style={{ margin: 0, fontSize: '14.5px', lineHeight: 1.65, color: 'var(--rs-text-secondary)' }}>
-          {article.summaryText}
+          {article.summaryText || 'Bài viết không có nội dung tóm tắt kèm theo trong RSS feed.'}
         </p>
-        <div>
-          <a className="rs-btn rs-btn-secondary" href={article.url} target="_blank" rel="noreferrer">
-            Mở bài viết gốc ngoài trình duyệt (https://) ↗
-          </a>
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 6 }}>
+          <span style={{ fontSize: '13px', fontWeight: 600 }}>Ghi chú cá nhân của bạn cho bài viết này (SQLite Local)</span>
+          <textarea
+            className="rs-textarea"
+            value={notesDraft}
+            onChange={(e) => setNotesDraft(e.target.value)}
+            placeholder="Ghi lại ý chính hoặc câu chuyện đáng chú ý để làm video..."
+          />
+        </label>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="rs-btn rs-btn-primary"
+            disabled={saving}
+            onClick={() => handleSaveNotesOrBookmark({ userNotes: notesDraft })}
+          >
+            {saving ? 'Đang lưu...' : 'Lưu ghi chú bài báo'}
+          </button>
+          {safeExternalUrl && (
+            <a className="rs-btn rs-btn-secondary" href={safeExternalUrl} target="_blank" rel="noreferrer">
+              Mở bài viết gốc ngoài trình duyệt (https://) ↗
+            </a>
+          )}
         </div>
       </article>
     </div>
+  );
+};
+
+export const ArticleDetailScreen: React.FC = () => {
+  const { currentEntry, goBack } = useAppNavigation();
+  const articleId = currentEntry.params.articleId ?? '';
+  const [state, setState] = useState<{
+    key: string;
+    article: RssArticleDto | null;
+    error: string | null;
+  }>({ key: '', article: null, error: null });
+
+  useEffect(() => {
+    if (!articleId) return undefined;
+    const controller = new AbortController();
+    fetchRssArticleDetailApi(articleId, controller.signal)
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        setState({ key: articleId, article: res, error: null });
+      })
+      .catch((err) => {
+        if (isAbortError(err) || controller.signal.aborted) return;
+        setState({
+          key: articleId,
+          article: null,
+          error: err instanceof ApiClientError ? err.message : 'Không tải được Chi tiết bài báo RSS.',
+        });
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [articleId]);
+
+  if (!articleId) {
+    return (
+      <div className="rs-container">
+        <EmptyStateCard
+          title="Chưa chọn bài báo RSS"
+          description="Hãy mở một bài viết từ G4 Tin tức & thảo luận."
+          actionLabel="← Quay lại"
+          onAction={goBack}
+        />
+      </div>
+    );
+  }
+
+  if (state.key !== articleId && state.error === null) {
+    return (
+      <div className="rs-container">
+        <LoadingSkeletonCard label="Đang tải Chi tiết bài báo RSS từ SQLite..." />
+      </div>
+    );
+  }
+
+  if (state.error || !state.article) {
+    return (
+      <div className="rs-container">
+        <EmptyStateCard
+          title="Không tìm thấy bài báo RSS"
+          description={state.error ?? 'Bài báo không tồn tại trong cơ sở dữ liệu.'}
+          actionLabel="← Quay lại"
+          onAction={goBack}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <ArticleDetailBody
+      key={state.article.id}
+      initialArticle={state.article}
+      onUpdated={(next) => setState({ key: articleId, article: next, error: null })}
+    />
   );
 };
 

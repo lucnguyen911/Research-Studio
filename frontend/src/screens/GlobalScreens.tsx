@@ -1,12 +1,27 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  DEMO_RSS_ARTICLES,
-  DEMO_RSS_TOPICS,
-  DEMO_SEARCH_SESSIONS,
-  DEMO_VIDEOS,
-  IDEA_STATUS_LABELS,
-} from '../prototype/demoData';
-import type { IdeaSourceType } from '../prototype/types';
+  ApiClientError,
+  fetchCachedTrendsApi,
+  fetchGlobalCategoriesApi,
+  fetchRssArticlesApi,
+  fetchRssPhrasesApi,
+  fetchSearchSessionDetailApi,
+  fetchSearchSessionsApi,
+  isAbortError,
+  refreshGlobalTrendsApi,
+  runFreeSearchApi,
+  updateRssArticleApi,
+} from '../api/client';
+import { formatDateTimeVi, mapYoutubeVideoDtoToItem } from '../api/mappers';
+import type {
+  RssArticleDto,
+  RssPhrasesResponseDto,
+  SearchSessionDto,
+  TrendsResponseDto,
+  YoutubeCategoryDto,
+} from '../api/types';
+import { IDEA_STATUS_LABELS } from '../prototype/demoData';
+import type { IdeaSourceType, VideoItem } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
 import { usePrototypeWorkspace } from '../state/workspaceContext';
 import { SparklineCell } from '../components/SparklineCell';
@@ -282,18 +297,105 @@ export const GlobalOverviewScreen: React.FC = () => {
 };
 
 export const TrendDiscoveryScreen: React.FC = () => {
-  const { uiMode, apiCachePurged, incrementQuotaDemo, pushToast } = usePrototypeWorkspace();
-  const [region, setRegion] = useState('VN');
-  const [category, setCategory] = useState('all');
+  const { currentEntry, updateViewState, navigate } = useAppNavigation();
+  const {
+    backendOnline,
+    systemSettings,
+    quotaStatus,
+    registerVideosInMemory,
+    syncQuotaStatus,
+    pushToast,
+  } = usePrototypeWorkspace();
 
-  const trendVideos =
-    uiMode === 'empty' || apiCachePurged || uiMode === 'no_api_key'
-      ? []
-      : DEMO_VIDEOS.filter((v) => v.isTrendDemo && (region === 'ALL' || v.regionCode === region)).filter(
-          (v) => category === 'all' || v.categoryName === category,
-        );
+  const vs = currentEntry.viewState;
+  const region = vs.regionCodeFilter ?? systemSettings.defaultRegionCode ?? 'VN';
+  const category = vs.categoryFilter ?? 'all';
+  const cacheKey = `${region}:${category}`;
 
-  const blocked = uiMode === 'no_api_key' || uiMode === 'offline' || uiMode === 'quota_general_exhausted';
+  const [categories, setCategories] = useState<YoutubeCategoryDto[]>([
+    { id: 'all', title: 'Tất cả danh mục' },
+  ]);
+  const [trendsState, setTrendsState] = useState<{
+    key: string;
+    data: TrendsResponseDto | null;
+    videos: VideoItem[];
+    error: string | null;
+  }>({ key: '', data: null, videos: [], error: null });
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchGlobalCategoriesApi({ regionCode: region, language: systemSettings.defaultRelevanceLanguage, signal: controller.signal })
+      .then((res) => {
+        if (!controller.signal.aborted) {
+          setCategories(res.items);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      controller.abort();
+    };
+  }, [region, systemSettings.defaultRelevanceLanguage]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchCachedTrendsApi(region, category, controller.signal)
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        const mapped = res.videos.map(mapYoutubeVideoDtoToItem);
+        registerVideosInMemory(mapped);
+        setTrendsState({ key: cacheKey, data: res, videos: mapped, error: null });
+      })
+      .catch((err) => {
+        if (isAbortError(err) || controller.signal.aborted) return;
+        const msg = err instanceof ApiClientError ? err.message : 'Không tải được cache Xu hướng từ SQLite.';
+        setTrendsState({ key: cacheKey, data: null, videos: [], error: msg });
+      });
+    return () => {
+      controller.abort();
+      refreshAbortRef.current?.abort();
+    };
+  }, [region, category, cacheKey, registerVideosInMemory]);
+
+  const isLoading = trendsState.key !== cacheKey && trendsState.error === null;
+  const trendVideos = trendsState.key === cacheKey ? trendsState.videos : [];
+  const fetchedAtDisplay = trendsState.key === cacheKey ? formatDateTimeVi(trendsState.data?.fetchedAt) : '—';
+
+  const blocked =
+    !backendOnline ||
+    !systemSettings.legalConsentAccepted ||
+    systemSettings.apiKeyStatus !== 'configured' ||
+    quotaStatus.generalData.exhausted ||
+    refreshing;
+
+  const handleRefreshTrends = () => {
+    refreshAbortRef.current?.abort();
+    const controller = new AbortController();
+    refreshAbortRef.current = controller;
+    setRefreshing(true);
+    void refreshGlobalTrendsApi({ regionCode: region, categoryId: category, maxResults: 25 }, controller.signal)
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        const mapped = res.videos.map(mapYoutubeVideoDtoToItem);
+        registerVideosInMemory(mapped);
+        setTrendsState({ key: cacheKey, data: res, videos: mapped, error: null });
+        void syncQuotaStatus();
+        pushToast('success', `Đã nạp ${mapped.length} video xu hướng ${region} (-1 unit General Data API).`);
+      })
+      .catch((err) => {
+        if (isAbortError(err)) {
+          pushToast('success', 'Đã hủy tác vụ làm mới Khám phá xu hướng.');
+          return;
+        }
+        pushToast('error', err instanceof ApiClientError ? err.message : 'Không thể làm mới Khám phá xu hướng.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setRefreshing(false);
+        }
+      });
+  };
 
   return (
     <div className="rs-container">
@@ -304,21 +406,33 @@ export const TrendDiscoveryScreen: React.FC = () => {
             <span className="rs-badge">Nguồn: YouTube Data API (mostPopular)</span>
           </div>
           <p className="rs-page-subtitle">
-            Cập nhật gần nhất: 16/11/2026 09:40 · Lưu đệm tối đa 30 ngày lịch · 0 lượt Search Queries
+            Cập nhật gần nhất: {fetchedAtDisplay} · Lưu đệm tối đa 30 ngày lịch · 0 lượt Search Queries
           </p>
         </div>
 
-        <button
-          type="button"
-          className="rs-btn rs-btn-primary"
-          disabled={blocked}
-          onClick={() => {
-            incrementQuotaDemo('general', 1);
-            pushToast('success', 'Đã làm mới Khám phá xu hướng DEMO (-1 unit General Data API).');
-          }}
-        >
-          Làm mới xu hướng (1 unit API)
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {refreshing ? (
+            <button
+              type="button"
+              className="rs-btn rs-btn-danger"
+              onClick={() => {
+                refreshAbortRef.current?.abort();
+                setRefreshing(false);
+              }}
+            >
+              Hủy (Cancel)
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="rs-btn rs-btn-primary"
+              disabled={blocked}
+              onClick={handleRefreshTrends}
+            >
+              Làm mới xu hướng (1 unit API)
+            </button>
+          )}
+        </div>
       </div>
 
       <GlobalModeBanners requiresYouTubeApi />
@@ -326,18 +440,28 @@ export const TrendDiscoveryScreen: React.FC = () => {
       <div className="rs-toolbar">
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontWeight: 600 }}>Quốc gia:</span>
-          <select className="rs-select rs-select-compact" value={region} onChange={(e) => setRegion(e.target.value)}>
+          <select
+            className="rs-select rs-select-compact"
+            value={region}
+            onChange={(e) => updateViewState({ regionCodeFilter: e.target.value, page: 1 })}
+          >
             <option value="VN">VN — Việt Nam</option>
             <option value="US">US — Hoa Kỳ</option>
-            <option value="ALL">Tất cả thị trường DEMO</option>
+            <option value="JP">JP — Nhật Bản</option>
           </select>
         </label>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontWeight: 600 }}>Danh mục:</span>
-          <select className="rs-select rs-select-compact" value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="all">Tất cả danh mục</option>
-            <option value="Khoa học & Công nghệ">Khoa học &amp; Công nghệ</option>
-            <option value="Giáo dục & Tài chính">Giáo dục &amp; Tài chính</option>
+          <select
+            className="rs-select rs-select-compact"
+            value={category}
+            onChange={(e) => updateViewState({ categoryFilter: e.target.value, page: 1 })}
+          >
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.title}
+              </option>
+            ))}
           </select>
         </label>
         <a
@@ -350,46 +474,157 @@ export const TrendDiscoveryScreen: React.FC = () => {
         </a>
       </div>
 
-      {uiMode === 'loading' ? (
-        <LoadingSkeletonCard />
+      {isLoading ? (
+        <LoadingSkeletonCard label="Đang đọc dữ liệu Xu hướng lưu đệm <= 30 ngày..." />
       ) : (
         <VideoResearchTable
           videos={trendVideos}
           fromScreen="global-trends"
-          emptyTitle="Chưa có dữ liệu Xu hướng khả dụng"
-          emptyDescription="Kiểm tra API Key hoặc bấm Làm mới xu hướng (1 unit General Data API) để nạp dữ liệu."
+          emptyTitle="Chưa có dữ liệu Xu hướng còn hạn cho bộ lọc này"
+          emptyDescription={
+            systemSettings.apiKeyStatus !== 'configured' || !systemSettings.legalConsentAccepted
+              ? 'Vui lòng xác nhận Pháp lý và lưu YouTube API Key trong Cài đặt hệ thống để tải Xu hướng.'
+              : 'Bấm "Làm mới xu hướng (1 unit API)" ở góc phải để lấy danh sách video nổi bật từ YouTube.'
+          }
         />
+      )}
+
+      {!isLoading && trendVideos.length === 0 && systemSettings.apiKeyStatus !== 'configured' && (
+        <div>
+          <button type="button" className="rs-btn rs-btn-secondary" onClick={() => navigate('system-settings')}>
+            Đi tới Cài đặt API Key &amp; Pháp lý →
+          </button>
+        </div>
       )}
     </div>
   );
 };
 
 export const FreeResearchScreen: React.FC = () => {
-  const { currentEntry } = useAppNavigation();
+  const { currentEntry, navigate } = useAppNavigation();
   const {
-    uiMode,
-    apiCachePurged,
+    backendOnline,
+    systemSettings,
+    quotaStatus,
     projects,
     addKeyword,
-    incrementQuotaDemo,
+    registerVideosInMemory,
+    syncQuotaStatus,
     pushToast,
   } = usePrototypeWorkspace();
-  const [queryInput, setQueryInput] = useState('ai local windows 11');
-  const [activeSessionId, setActiveSessionId] = useState(DEMO_SEARCH_SESSIONS[0].id);
+
+  const [queryInput, setQueryInput] = useState('');
+  const [regionCode, setRegionCode] = useState(systemSettings.defaultRegionCode || 'VN');
+  const [relevanceLanguage, setRelevanceLanguage] = useState(systemSettings.defaultRelevanceLanguage || 'vi');
+  const [orderBy, setOrderBy] = useState<'relevance' | 'date' | 'viewCount' | 'rating'>('relevance');
+  const [sessions, setSessions] = useState<SearchSessionDto[]>([]);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const [activeSession, setActiveSession] = useState<SearchSessionDto | null>(null);
+  const [resultVideos, setResultVideos] = useState<VideoItem[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [loadingSession, setLoadingSession] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const activeProject = projects.find((p) => p.id === currentEntry.projectId) ?? projects[0] ?? null;
-  const activeSession = DEMO_SEARCH_SESSIONS.find((s) => s.id === activeSessionId) ?? DEMO_SEARCH_SESSIONS[0];
 
-  const searchVideos =
-    uiMode === 'empty' || apiCachePurged || uiMode === 'no_api_key'
-      ? []
-      : DEMO_VIDEOS.filter((v) => activeSession.videoIds.includes(v.id));
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchSearchSessionsApi(controller.signal)
+      .then((list) => {
+        if (controller.signal.aborted) return;
+        setSessions(list);
+        setSessionsLoaded(true);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setSessionsLoaded(true);
+        }
+      });
+    return () => {
+      controller.abort();
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  const openSavedSession = (sessionId: string) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLoadingSession(true);
+    void fetchSearchSessionDetailApi(sessionId, controller.signal)
+      .then((detail) => {
+        if (controller.signal.aborted) return;
+        const mapped = detail.videos.map(mapYoutubeVideoDtoToItem);
+        registerVideosInMemory(mapped);
+        setActiveSession(detail.session);
+        setQueryInput(detail.session.query);
+        setResultVideos(mapped);
+        pushToast('success', `Đã mở lại phiên "${detail.session.query}" từ SQLite (0 quota YouTube).`);
+      })
+      .catch((err) => {
+        if (!isAbortError(err)) {
+          pushToast('error', err instanceof ApiClientError ? err.message : 'Không mở được phiên tìm kiếm cũ.');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoadingSession(false);
+        }
+      });
+  };
+
+  const handleRunSearch = () => {
+    if (!queryInput.trim()) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setSearching(true);
+    void runFreeSearchApi(
+      {
+        query: queryInput.trim(),
+        objectType: 'video',
+        regionCode,
+        relevanceLanguage,
+        orderBy,
+        maxResults: 25,
+      },
+      controller.signal,
+    )
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        const mapped = res.videos.map(mapYoutubeVideoDtoToItem);
+        registerVideosInMemory(mapped);
+        setActiveSession(res.session);
+        setResultVideos(mapped);
+        setSessions((prev) => [res.session, ...prev.filter((s) => s.id !== res.session.id)]);
+        void syncQuotaStatus();
+        pushToast(
+          'success',
+          `Đã tìm "${res.session.query}" (${mapped.length} video) — 1 lượt Search Queries + General Data API.`,
+        );
+      })
+      .catch((err) => {
+        if (isAbortError(err)) {
+          pushToast('success', 'Đã hủy lệnh tìm kiếm.');
+          return;
+        }
+        pushToast('error', err instanceof ApiClientError ? err.message : 'Tìm kiếm YouTube thất bại.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setSearching(false);
+        }
+      });
+  };
 
   const searchBlocked =
     !queryInput.trim() ||
-    uiMode === 'no_api_key' ||
-    uiMode === 'offline' ||
-    uiMode === 'quota_search_exhausted';
+    !backendOnline ||
+    !systemSettings.legalConsentAccepted ||
+    systemSettings.apiKeyStatus !== 'configured' ||
+    quotaStatus.searchQueries.exhausted ||
+    quotaStatus.generalData.exhausted ||
+    searching;
 
   return (
     <div className="rs-container">
@@ -400,7 +635,7 @@ export const FreeResearchScreen: React.FC = () => {
             <span className="rs-badge">Chi phí tìm mới: 1 lượt Search Queries + 1 unit General Data API</span>
           </div>
           <p className="rs-page-subtitle">
-            Chỉ gọi YouTube API khi bạn bấm Tìm; mở lại phiên cũ còn hạn &lt;= 30 ngày tiêu tốn 0 quota
+            Chỉ gọi YouTube API khi bạn bấm Tìm (0 auto-retry trên search.list); mở lại phiên cũ còn hạn &lt;= 30 ngày tốn 0 quota
           </p>
         </div>
       </div>
@@ -412,23 +647,63 @@ export const FreeResearchScreen: React.FC = () => {
           type="text"
           aria-label="Nhập từ khóa tìm kiếm YouTube"
           className="rs-input"
-          style={{ flex: '1 1 260px' }}
+          style={{ flex: '1 1 240px' }}
           placeholder="Nhập từ khóa muốn khảo sát trên YouTube..."
           value={queryInput}
           onChange={(e) => setQueryInput(e.target.value)}
         />
-        <button
-          type="button"
-          className="rs-btn rs-btn-primary"
-          disabled={searchBlocked}
-          onClick={() => {
-            incrementQuotaDemo('search', 1);
-            incrementQuotaDemo('general', 1);
-            pushToast('success', `Đã thực hiện tìm kiếm "${queryInput.trim()}" (-1 Search Queries, -1 API unit).`);
-          }}
+        <select
+          aria-label="Quốc gia tìm kiếm"
+          className="rs-select rs-select-compact"
+          value={regionCode}
+          onChange={(e) => setRegionCode(e.target.value)}
         >
-          Tìm trên YouTube (1 Search + 1 API)
-        </button>
+          <option value="VN">VN</option>
+          <option value="US">US</option>
+          <option value="JP">JP</option>
+        </select>
+        <select
+          aria-label="Ngôn ngữ tìm kiếm"
+          className="rs-select rs-select-compact"
+          value={relevanceLanguage}
+          onChange={(e) => setRelevanceLanguage(e.target.value)}
+        >
+          <option value="vi">vi</option>
+          <option value="en">en</option>
+        </select>
+        <select
+          aria-label="Thứ tự trả kết quả từ YouTube"
+          className="rs-select rs-select-compact"
+          value={orderBy}
+          onChange={(e) => setOrderBy(e.target.value as 'relevance' | 'date' | 'viewCount' | 'rating')}
+        >
+          <option value="relevance">Liên quan nhất</option>
+          <option value="date">Mới nhất (date)</option>
+          <option value="viewCount">Nhiều lượt xem (viewCount)</option>
+        </select>
+
+        {searching ? (
+          <button
+            type="button"
+            className="rs-btn rs-btn-danger"
+            onClick={() => {
+              abortRef.current?.abort();
+              setSearching(false);
+            }}
+          >
+            Hủy (Cancel)
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="rs-btn rs-btn-primary"
+            disabled={searchBlocked}
+            onClick={handleRunSearch}
+          >
+            Tìm trên YouTube (1 Search + 1 API)
+          </button>
+        )}
+
         {activeProject && queryInput.trim() && (
           <button
             type="button"
@@ -442,30 +717,48 @@ export const FreeResearchScreen: React.FC = () => {
 
       <div className="rs-card-subtle" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
         <strong style={{ fontSize: '13px' }}>Phiên tìm đã lưu (&lt;= 30 ngày · Mở lại 0 quota):</strong>
-        {DEMO_SEARCH_SESSIONS.map((sess) => (
-          <button
-            key={sess.id}
-            type="button"
-            className={`rs-pill-tab ${activeSessionId === sess.id ? 'is-active' : ''}`}
-            onClick={() => {
-              setActiveSessionId(sess.id);
-              setQueryInput(sess.query);
-            }}
-          >
-            “{sess.query}” ({sess.regionCode}) · {sess.videoIds.length} video
-          </button>
-        ))}
+        {!sessionsLoaded ? (
+          <span style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>Đang tải lịch sử phiên...</span>
+        ) : sessions.length === 0 ? (
+          <span style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
+            Chưa có phiên tìm kiếm nào còn hạn lưu đệm trên SQLite.
+          </span>
+        ) : (
+          sessions.map((sess) => (
+            <button
+              key={sess.id}
+              type="button"
+              className={`rs-pill-tab ${activeSession?.id === sess.id ? 'is-active' : ''}`}
+              onClick={() => openSavedSession(sess.id)}
+            >
+              “{sess.query}” ({sess.regionCode}) · {sess.resultCount} kq
+            </button>
+          ))
+        )}
       </div>
 
-      {uiMode === 'loading' ? (
-        <LoadingSkeletonCard />
+      {searching || loadingSession ? (
+        <LoadingSkeletonCard label="Đang tải kết quả tìm kiếm..." />
       ) : (
-        <VideoResearchTable
-          videos={searchVideos}
-          fromScreen="global-search"
-          emptyTitle="Không có kết quả tìm kiếm khả dụng"
-          emptyDescription="Nhập từ khóa hợp lệ hoặc chọn một phiên tìm kiếm còn hạn <= 30 ngày để xem lại với 0 quota."
-        />
+        <>
+          <VideoResearchTable
+            videos={resultVideos}
+            fromScreen="global-search"
+            emptyTitle="Chưa chọn hoặc chưa có kết quả tìm kiếm"
+            emptyDescription={
+              systemSettings.apiKeyStatus !== 'configured' || !systemSettings.legalConsentAccepted
+                ? 'Vui lòng xác nhận Pháp lý & lưu API Key trong Cài đặt hệ thống, hoặc chọn một phiên tìm kiếm cũ phía trên.'
+                : 'Nhập từ khóa và bấm "Tìm trên YouTube" (tiêu tốn 1 lượt Search Queries) hoặc mở lại phiên đã lưu (0 quota).'
+            }
+          />
+          {resultVideos.length === 0 && systemSettings.apiKeyStatus !== 'configured' && (
+            <div>
+              <button type="button" className="rs-btn rs-btn-secondary" onClick={() => navigate('system-settings')}>
+                Đi tới Cài đặt API Key &amp; Pháp lý →
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -473,24 +766,93 @@ export const FreeResearchScreen: React.FC = () => {
 
 export const RssNewsScreen: React.FC = () => {
   const { currentEntry, navigate, updateViewState } = useAppNavigation();
-  const { uiMode, rssFeeds, toggleRssFeedEnabled, retryRssFeed, addRssFeed, openSaveIdeaModal, pushToast } =
-    usePrototypeWorkspace();
+  const {
+    rssFeedDtos,
+    addRssFeed,
+    toggleRssFeedEnabled,
+    retryRssFeed,
+    deleteRssFeed,
+    refreshAllRssFeeds,
+    openSaveIdeaModal,
+    pushToast,
+  } = usePrototypeWorkspace();
+
   const [newUrl, setNewUrl] = useState('');
   const [newName, setNewName] = useState('');
-  const vs = currentEntry.viewState;
+  const [addingFeed, setAddingFeed] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
+  const [busyFeedId, setBusyFeedId] = useState<string | null>(null);
+  const [confirmDeleteFeedId, setConfirmDeleteFeedId] = useState<string | null>(null);
 
-  const articles =
-    uiMode === 'empty'
-      ? []
-      : DEMO_RSS_ARTICLES.filter((a) => {
-          if (vs.selectedFeedId !== 'all' && a.feedId !== vs.selectedFeedId) return false;
-          if (vs.onlyBookmarked && !a.bookmarked) return false;
-          if (vs.search.trim()) {
-            const q = vs.search.trim().toLowerCase();
-            return a.title.toLowerCase().includes(q) || a.summaryText.toLowerCase().includes(q);
-          }
-          return true;
+  const [articlesState, setArticlesState] = useState<{
+    queryKey: string;
+    items: RssArticleDto[];
+    phrases: RssPhrasesResponseDto | null;
+    error: string | null;
+  }>({ queryKey: '', items: [], phrases: null, error: null });
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const refreshAbortRef = useRef<AbortController | null>(null);
+
+  const vs = currentEntry.viewState;
+  const queryKey = `${vs.selectedFeedId}|${vs.onlyBookmarked}|${vs.search}|${reloadNonce}`;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([
+      fetchRssArticlesApi(
+        {
+          feedId: vs.selectedFeedId,
+          onlyBookmarked: vs.onlyBookmarked,
+          search: vs.search,
+          limit: 120,
+        },
+        controller.signal,
+      ),
+      fetchRssPhrasesApi({ days: 7, limit: 10 }, controller.signal),
+    ])
+      .then(([articlesRes, phrasesRes]) => {
+        if (controller.signal.aborted) return;
+        setArticlesState({
+          queryKey,
+          items: articlesRes.items,
+          phrases: phrasesRes,
+          error: null,
         });
+      })
+      .catch((err) => {
+        if (isAbortError(err) || controller.signal.aborted) return;
+        setArticlesState({
+          queryKey,
+          items: [],
+          phrases: null,
+          error: err instanceof ApiClientError ? err.message : 'Không tải được dữ liệu RSS từ SQLite.',
+        });
+      });
+
+    return () => {
+      controller.abort();
+      refreshAbortRef.current?.abort();
+    };
+  }, [vs.selectedFeedId, vs.onlyBookmarked, vs.search, queryKey]);
+
+  const isLoading = articlesState.queryKey !== queryKey && articlesState.error === null;
+  const articles = articlesState.queryKey === queryKey ? articlesState.items : [];
+  const phrases = articlesState.queryKey === queryKey ? articlesState.phrases : null;
+  const feedToDelete = rssFeedDtos.find((f) => f.id === confirmDeleteFeedId) ?? null;
+
+  const handleToggleArticleBookmark = (art: RssArticleDto) => {
+    void updateRssArticleApi(art.id, { bookmarked: !art.bookmarked })
+      .then((updated) => {
+        setArticlesState((prev) => ({
+          ...prev,
+          items: prev.items.map((item) => (item.id === art.id ? updated : item)),
+        }));
+        pushToast('success', updated.bookmarked ? 'Đã đánh dấu bài viết RSS.' : 'Đã bỏ đánh dấu bài viết.');
+      })
+      .catch((err) => {
+        pushToast('error', err instanceof ApiClientError ? err.message : 'Không cập nhật được trạng thái bài viết.');
+      });
+  };
 
   return (
     <div className="rs-container">
@@ -501,17 +863,44 @@ export const RssNewsScreen: React.FC = () => {
             <span className="rs-badge rs-badge-success">Nguồn: RSS / Atom (Dữ liệu ngoài YouTube · 0 quota)</span>
           </div>
           <p className="rs-page-subtitle">
-            Làm sạch HTML an toàn chống XSS · Cô lập nguồn lỗi theo từng feed · Đọc đầy đủ khi mất mạng
+            Kiểm tra SSRF &amp; làm sạch HTML an toàn · Cô lập nguồn lỗi theo từng feed · Đọc đầy đủ từ SQLite khi offline
           </p>
         </div>
-        <button
-          type="button"
-          className="rs-btn rs-btn-primary"
-          disabled={uiMode === 'offline'}
-          onClick={() => pushToast('success', 'Đã làm mới các nguồn RSS đang bật (0 quota YouTube).')}
-        >
-          Làm mới RSS (0 quota)
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {refreshingAll ? (
+            <button
+              type="button"
+              className="rs-btn rs-btn-danger"
+              onClick={() => {
+                refreshAbortRef.current?.abort();
+                setRefreshingAll(false);
+                pushToast('success', 'Đã hủy tác vụ làm mới RSS đang chạy.');
+              }}
+            >
+              Hủy làm mới (Cancel)
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="rs-btn rs-btn-primary"
+              disabled={rssFeedDtos.length === 0}
+              onClick={() => {
+                refreshAbortRef.current?.abort();
+                const controller = new AbortController();
+                refreshAbortRef.current = controller;
+                setRefreshingAll(true);
+                void refreshAllRssFeeds(controller.signal).finally(() => {
+                  if (!controller.signal.aborted) {
+                    setRefreshingAll(false);
+                    setReloadNonce((n) => n + 1);
+                  }
+                });
+              }}
+            >
+              Làm mới tất cả RSS đang bật (0 quota)
+            </button>
+          )}
+        </div>
       </div>
 
       <GlobalModeBanners />
@@ -519,16 +908,18 @@ export const RssNewsScreen: React.FC = () => {
       <div className="rs-toolbar">
         <input
           type="url"
+          aria-label="URL nguồn RSS hoặc Atom"
           className="rs-input"
           style={{ flex: '1 1 250px' }}
-          placeholder="https://example.com/feed.xml"
+          placeholder="https://example.com/feed.xml (chỉ URL công khai)"
           value={newUrl}
           onChange={(e) => setNewUrl(e.target.value)}
         />
         <input
           type="text"
+          aria-label="Tên hiển thị nguồn RSS"
           className="rs-input"
-          style={{ width: 200 }}
+          style={{ width: 220 }}
           placeholder="Tên hiển thị nguồn..."
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
@@ -536,73 +927,120 @@ export const RssNewsScreen: React.FC = () => {
         <button
           type="button"
           className="rs-btn rs-btn-secondary"
-          disabled={!newUrl.trim()}
+          disabled={!newUrl.trim() || addingFeed}
           onClick={() => {
-            addRssFeed(newUrl, newName);
-            setNewUrl('');
-            setNewName('');
+            void (async () => {
+              setAddingFeed(true);
+              try {
+                const created = await addRssFeed(newUrl, newName);
+                if (created) {
+                  setNewUrl('');
+                  setNewName('');
+                  await retryRssFeed(created.id);
+                  setReloadNonce((n) => n + 1);
+                }
+              } finally {
+                setAddingFeed(false);
+              }
+            })();
           }}
         >
-          + Thêm nguồn RSS
+          {addingFeed ? 'Đang kiểm tra SSRF...' : '+ Thêm & Tải nguồn RSS'}
         </button>
       </div>
 
       <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <strong style={{ fontSize: '14px' }}>Trạng thái nguồn RSS đã cấu hình (Cô lập lỗi theo từng nguồn):</strong>
-        <div className="rs-grid-2">
-          {rssFeeds.map((feed) => {
-            const forceError = uiMode === 'rss_error' || feed.status === 'error';
-            return (
-              <div
-                key={feed.id}
-                className="rs-card-subtle"
-                style={{
-                  borderColor: forceError ? 'var(--rs-danger-border)' : 'var(--rs-border)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 6,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <strong>{feed.name}</strong>
-                  <span className={`rs-badge ${forceError ? 'rs-badge-danger' : 'rs-badge-success'}`}>
-                    {forceError ? feed.errorCode ?? 'HTTP 404 / XML Lỗi' : 'Hoạt động'}
-                  </span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>
-                  {feed.url} · Lần kiểm tra cuối: {feed.lastFetchedAt}
-                </div>
-                {forceError && (
-                  <div style={{ fontSize: '12.5px', color: 'var(--rs-danger-text)' }}>
-                    {feed.errorMessage ?? 'Feed gặp lỗi kết nối/XML. Các nguồn RSS khác vẫn hoạt động bình thường.'}
+        <strong style={{ fontSize: '14px' }}>
+          Trạng thái nguồn RSS đã cấu hình ({rssFeedDtos.length}) — Cô lập lỗi theo từng feed:
+        </strong>
+        {rssFeedDtos.length === 0 ? (
+          <span style={{ fontSize: '13px', color: 'var(--rs-text-muted)' }}>
+            Chưa có nguồn RSS nào. Hãy dán URL nguồn RSS/Atom công khai phía trên để thu thập tin tức (0 quota YouTube).
+          </span>
+        ) : (
+          <div className="rs-grid-2">
+            {rssFeedDtos.map((feed) => {
+              const hasError = feed.lastStatus === 'error';
+              const isBusy = busyFeedId === feed.id;
+              return (
+                <div
+                  key={feed.id}
+                  className="rs-card-subtle"
+                  style={{
+                    borderColor: hasError ? 'var(--rs-danger-border)' : 'var(--rs-border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <strong>{feed.name}</strong>
+                    <span className={`rs-badge ${hasError ? 'rs-badge-danger' : 'rs-badge-success'}`}>
+                      {hasError ? feed.lastErrorCode ?? 'Lỗi tải RSS' : `${feed.articleCount} bài · Hoạt động`}
+                    </span>
                   </div>
-                )}
-                <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-                  <button
-                    type="button"
-                    className="rs-btn rs-btn-sm rs-btn-secondary"
-                    onClick={() => toggleRssFeedEnabled(feed.id)}
-                  >
-                    {feed.enabled ? 'Tạm tắt' : 'Bật lại'}
-                  </button>
-                  {forceError && (
+                  <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)', wordBreak: 'break-all' }}>
+                    {feed.url} · Lần kiểm tra cuối: {formatDateTimeVi(feed.lastFetchedAt)}
+                  </div>
+                  {hasError && feed.lastErrorMessage && (
+                    <div style={{ fontSize: '12.5px', color: 'var(--rs-danger-text)' }}>
+                      {feed.lastErrorMessage}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="rs-btn rs-btn-sm rs-btn-secondary"
+                      disabled={isBusy}
+                      onClick={() => {
+                        void (async () => {
+                          setBusyFeedId(feed.id);
+                          try {
+                            await toggleRssFeedEnabled(feed.id, !feed.enabled);
+                          } finally {
+                            setBusyFeedId(null);
+                          }
+                        })();
+                      }}
+                    >
+                      {feed.enabled ? 'Tạm tắt' : 'Bật lại'}
+                    </button>
                     <button
                       type="button"
                       className="rs-btn rs-btn-sm rs-btn-tinted"
-                      onClick={() => retryRssFeed(feed.id)}
+                      disabled={isBusy}
+                      onClick={() => {
+                        void (async () => {
+                          setBusyFeedId(feed.id);
+                          try {
+                            await retryRssFeed(feed.id);
+                            setReloadNonce((n) => n + 1);
+                          } finally {
+                            setBusyFeedId(null);
+                          }
+                        })();
+                      }}
                     >
-                      Thử lại nguồn này
+                      {isBusy ? 'Đang tải...' : hasError ? 'Thử lại nguồn này' : 'Làm mới feed'}
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      className="rs-btn rs-btn-sm rs-btn-danger"
+                      disabled={isBusy}
+                      onClick={() => setConfirmDeleteFeedId(feed.id)}
+                    >
+                      Xóa
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
-      {uiMode === 'loading' ? (
-        <LoadingSkeletonCard />
+      {isLoading ? (
+        <LoadingSkeletonCard label="Đang tải danh sách bài báo RSS từ SQLite..." />
       ) : (
         <div className="rs-detail-layout">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -611,7 +1049,7 @@ export const RssNewsScreen: React.FC = () => {
                 type="search"
                 className="rs-input"
                 style={{ flex: '1 1 200px' }}
-                placeholder="Lọc bài viết RSS..."
+                placeholder="Lọc bài viết RSS đã lưu..."
                 value={vs.search}
                 onChange={(e) => updateViewState({ search: e.target.value })}
               />
@@ -621,8 +1059,8 @@ export const RssNewsScreen: React.FC = () => {
                 value={vs.selectedFeedId}
                 onChange={(e) => updateViewState({ selectedFeedId: e.target.value })}
               >
-                <option value="all">Tất cả nguồn RSS ({rssFeeds.length})</option>
-                {rssFeeds.map((f) => (
+                <option value="all">Tất cả nguồn RSS ({rssFeedDtos.length})</option>
+                {rssFeedDtos.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name}
                   </option>
@@ -640,88 +1078,130 @@ export const RssNewsScreen: React.FC = () => {
 
             {articles.length === 0 ? (
               <EmptyStateCard
-                title="Không có bài viết RSS khớp bộ lọc"
-                description="Thử chọn Tất cả nguồn RSS hoặc làm mới nguồn tin đang bật."
+                title="Chưa có bài viết RSS nào khớp bộ lọc"
+                description="Thêm nguồn RSS công khai, bấm Làm mới tất cả RSS hoặc xóa bộ lọc hiện tại."
                 actionLabel="Xóa bộ lọc"
                 onAction={() => updateViewState({ search: '', selectedFeedId: 'all', onlyBookmarked: false })}
               />
             ) : (
-              articles.map((art) => (
-                <article key={art.id} className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                    <button
-                      type="button"
-                      className="rs-title-link"
-                      style={{ fontSize: '15px' }}
-                      onClick={() => navigate('article-detail', { params: { articleId: art.id } })}
-                    >
-                      {art.title}
-                    </button>
-                    {art.bookmarked && <span className="rs-badge rs-badge-demo">Đã đánh dấu</span>}
-                  </div>
-                  <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
-                    {art.feedName} · {art.publishedAt} · Nguồn: RSS (Ngoài YouTube)
-                  </div>
-                  <p style={{ margin: 0, color: 'var(--rs-text-secondary)', fontSize: '13.5px' }}>{art.summaryText}</p>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="rs-btn rs-btn-sm rs-btn-tinted"
-                      onClick={() =>
-                        openSaveIdeaModal({
-                          title: art.title,
-                          sourceType: 'rss_article',
-                          sourceRefId: art.id,
-                          sourceTitleSnapshot: art.title,
-                          sourceUrl: art.url,
-                          tags: art.tags,
-                        })
-                      }
-                    >
-                      + Tạo Ý tưởng
-                    </button>
-                    <a className="rs-btn rs-btn-sm rs-btn-secondary" href={art.url} target="_blank" rel="noreferrer">
-                      Mở bài gốc ↗
-                    </a>
-                  </div>
-                </article>
-              ))
+              articles.map((art) => {
+                const safeExternalUrl =
+                  art.canonicalUrl.startsWith('https://') || art.canonicalUrl.startsWith('http://')
+                    ? art.canonicalUrl
+                    : '';
+                return (
+                  <article key={art.id} className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                      <button
+                        type="button"
+                        className="rs-title-link"
+                        style={{ fontSize: '15px' }}
+                        onClick={() => navigate('article-detail', { params: { articleId: art.id } })}
+                      >
+                        {art.title}
+                      </button>
+                      {art.bookmarked && <span className="rs-badge rs-badge-success">★ Đã đánh dấu</span>}
+                    </div>
+                    <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
+                      {art.feedName} · {formatDateTimeVi(art.publishedAt ?? art.fetchedAt)} · {art.sourceLabel}
+                    </div>
+                    <p style={{ margin: 0, color: 'var(--rs-text-secondary)', fontSize: '13.5px' }}>{art.summaryText}</p>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="rs-btn rs-btn-sm rs-btn-tinted"
+                        onClick={() =>
+                          openSaveIdeaModal({
+                            title: art.title,
+                            sourceType: 'rss_article',
+                            sourceRefId: art.id,
+                            sourceTitleSnapshot: art.title,
+                            sourceUrl: safeExternalUrl,
+                            tags: [art.feedName],
+                          })
+                        }
+                      >
+                        + Tạo Ý tưởng
+                      </button>
+                      <button
+                        type="button"
+                        className="rs-btn rs-btn-sm rs-btn-secondary"
+                        onClick={() => handleToggleArticleBookmark(art)}
+                      >
+                        {art.bookmarked ? 'Bỏ đánh dấu' : '☆ Đánh dấu'}
+                      </button>
+                      {safeExternalUrl && (
+                        <a className="rs-btn rs-btn-sm rs-btn-secondary" href={safeExternalUrl} target="_blank" rel="noreferrer">
+                          Mở bài gốc ↗
+                        </a>
+                      )}
+                    </div>
+                  </article>
+                );
+              })
             )}
           </div>
 
           <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <h2 style={{ margin: 0, fontSize: '15px' }}>Cụm từ nổi bật trên RSS (Python tất định · DEMO)</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <h2 style={{ margin: 0, fontSize: '15px' }}>Cụm từ nổi bật trên RSS</h2>
+              <span className="rs-badge rs-badge-success">Nguồn: RSS (Dữ liệu ngoài YouTube)</span>
+            </div>
             <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
-              Tần suất tính trực tiếp trên tập bài RSS ngoài YouTube — hợp lệ hoàn toàn vì không dùng YouTube API Data.
+              Tính bằng Python tất định trên {phrases?.articleSampleSize ?? 0} bài báo RSS đã lưu (0 quota YouTube, đọc được offline).
             </p>
-            <table className="rs-table">
-              <thead>
-                <tr>
-                  <th>Cụm từ RSS</th>
-                  <th>Xu hướng 7 ngày</th>
-                </tr>
-              </thead>
-              <tbody>
-                {DEMO_RSS_TOPICS.map((topic) => (
-                  <tr key={topic.phrase}>
-                    <td style={{ fontWeight: 600 }}>{topic.phrase}</td>
-                    <td>
-                      <SparklineCell
-                        points={uiMode === 'insufficient_data' ? [topic.articleCount] : topic.points7d}
-                        badgeLabel={`${topic.articleCount} bài RSS`}
-                        directionLabel={topic.direction === 'up' ? '↗ Tăng' : '→ Ổn định'}
-                        tooltipTitle={`Tần suất "${topic.phrase}" trên RSS`}
-                        tooltipDetail="Số bài báo/diễn đàn nhắc tới cụm từ trong 7 ngày qua (Nguồn: RSS)."
-                        insufficientText="Chưa đủ dữ liệu RSS"
-                      />
-                    </td>
+            {!phrases || phrases.items.length === 0 ? (
+              <span style={{ fontSize: '13px', color: 'var(--rs-text-muted)' }}>
+                Chưa đủ dữ liệu bài viết RSS trong 7 ngày qua để thống kê cụm từ.
+              </span>
+            ) : (
+              <table className="rs-table">
+                <thead>
+                  <tr>
+                    <th>Cụm từ RSS</th>
+                    <th>Xu hướng 7 ngày</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {phrases.items.map((topic) => (
+                    <tr key={topic.phrase}>
+                      <td style={{ fontWeight: 600 }}>{topic.phrase}</td>
+                      <td>
+                        <SparklineCell
+                          points={topic.points7d}
+                          badgeLabel={`${topic.articleCount} bài RSS`}
+                          directionLabel={topic.direction === 'up' ? '↗ Tăng' : '→ Ổn định'}
+                          tooltipTitle={`Tần suất "${topic.phrase}" trên RSS`}
+                          tooltipDetail="Số bài RSS nhắc tới cụm từ trong 7 ngày gần nhất (Nguồn: RSS — Dữ liệu ngoài YouTube)."
+                          insufficientText="Chưa đủ mốc ngày"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </section>
         </div>
       )}
+
+      <ConfirmDeleteModal
+        open={Boolean(feedToDelete)}
+        title="Xóa nguồn RSS?"
+        warningText={`Bạn sắp xóa nguồn "${feedToDelete?.name ?? ''}" cùng các bài viết đệm chưa lưu thành Ý tưởng. Các Ý tưởng đã lưu vẫn giữ nguyên 100%.`}
+        confirmLabel="Xác nhận xóa nguồn RSS"
+        onCancel={() => setConfirmDeleteFeedId(null)}
+        onConfirm={() => {
+          if (feedToDelete) {
+            void deleteRssFeed(feedToDelete.id).then(() => {
+              setConfirmDeleteFeedId(null);
+              setReloadNonce((n) => n + 1);
+            });
+          } else {
+            setConfirmDeleteFeedId(null);
+          }
+        }}
+      />
     </div>
   );
 };

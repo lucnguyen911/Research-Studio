@@ -787,17 +787,23 @@ export const ProjectIdeasScreen: React.FC = () => {
 };
 
 const ProjectSettingsForm: React.FC<{ project: ProjectItem }> = ({ project }) => {
-  const { updateProject, exportProjectJson, deleteProject } = usePrototypeWorkspace();
+  const { updateProject, updateProjectRssFeeds, exportProjectJson, deleteProject, rssFeedDtos } =
+    usePrototypeWorkspace();
   const { navigate } = useAppNavigation();
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
   const [regionCode, setRegionCode] = useState(project.regionCode);
   const [relevanceLanguage, setRelevanceLanguage] = useState(project.relevanceLanguage);
   const [targetFormat, setTargetFormat] = useState<ProjectItem['targetFormat']>(project.targetFormat);
+  const [linkedFeedIds, setLinkedFeedIds] = useState<string[]>(project.linkedFeedIds);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const toggleFeed = (fid: string) => {
+    setLinkedFeedIds((prev) => (prev.includes(fid) ? prev.filter((id) => id !== fid) : [...prev, fid]));
+  };
 
   return (
     <div className="rs-container">
@@ -808,7 +814,7 @@ const ProjectSettingsForm: React.FC<{ project: ProjectItem }> = ({ project }) =>
             <span className="rs-badge rs-badge-success">Dữ liệu thật SQLite</span>
           </div>
           <p className="rs-page-subtitle">
-            Cấu hình thị trường/ngôn ngữ cô lập theo Project, tải JSON sạch đọc-chỉ và xóa Project an toàn
+            Cấu hình thị trường/ngôn ngữ cô lập, liên kết nguồn RSS cho Project, tải JSON sạch và xóa an toàn
           </p>
         </div>
       </div>
@@ -856,18 +862,36 @@ const ProjectSettingsForm: React.FC<{ project: ProjectItem }> = ({ project }) =>
           </label>
         </div>
 
-        <div className="rs-card-subtle" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <div>
+        <div className="rs-card-subtle" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ fontWeight: 600, fontSize: '13.5px' }}>
-              Nguồn RSS toàn cục đang liên kết: <strong>{project.linkedFeedIds.length}</strong> nguồn
+              Nguồn RSS toàn cục liên kết với Project này (<code>project_rss_feeds</code> · {linkedFeedIds.length} đã chọn):
             </div>
-            <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
-              Checkbox chọn/bỏ chọn từng nguồn RSS cho Project sẽ được mở ở Task T11 cùng bộ thu thập RSS thật.
-            </div>
+            <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('global-news')}>
+              Quản lý thêm ở G4 RSS →
+            </button>
           </div>
-          <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('global-news')}>
-            Đi tới G4 RSS
-          </button>
+          {rssFeedDtos.length === 0 ? (
+            <span style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
+              Chưa có nguồn RSS nào trong hệ thống. Hãy sang màn hình G4 Tin tức &amp; thảo luận để thêm nguồn RSS trước.
+            </span>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {rssFeedDtos.map((f) => (
+                <label key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={linkedFeedIds.includes(f.id)}
+                    onChange={() => toggleFeed(f.id)}
+                  />
+                  <span>{f.name}</span>
+                  <span className="rs-badge" style={{ fontSize: '11.5px' }}>
+                    {f.articleCount} bài
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 4 }}>
@@ -879,20 +903,23 @@ const ProjectSettingsForm: React.FC<{ project: ProjectItem }> = ({ project }) =>
               void (async () => {
                 setSaving(true);
                 try {
-                  await updateProject(project.id, {
+                  const okProj = await updateProject(project.id, {
                     name,
                     description,
                     regionCode,
                     relevanceLanguage,
                     targetFormat,
                   });
+                  if (okProj) {
+                    await updateProjectRssFeeds(project.id, linkedFeedIds);
+                  }
                 } finally {
                   setSaving(false);
                 }
               })();
             }}
           >
-            {saving ? 'Đang lưu...' : 'Lưu cấu hình Project'}
+            {saving ? 'Đang lưu...' : 'Lưu cấu hình & Liên kết RSS Project'}
           </button>
           <button
             type="button"

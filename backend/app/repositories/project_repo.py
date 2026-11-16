@@ -276,3 +276,51 @@ def delete_project_safely(project_id: str, confirm_name: str) -> dict[str, Any]:
         "recoveryBackupFilename": recovery_filename,
         "sharedEntitiesPreserved": True,
     }
+
+
+def set_project_rss_feeds(project_id: str, feed_ids: list[str]) -> dict[str, Any]:
+    """Atomically replace global RSS feed links scoped to project_id inside project_rss_feeds."""
+    clean_ids: list[str] = []
+    seen: set[str] = set()
+    for raw in feed_ids:
+        cleaned = str(raw).strip()
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            clean_ids.append(cleaned)
+
+    now = _utc_now_iso()
+    with write_db() as conn:
+        proj = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if proj is None:
+            raise AppError("PROJECT_NOT_FOUND", "Không tìm thấy Project để gắn nguồn RSS.", status_code=404)
+
+        if clean_ids:
+            placeholders = ",".join("?" for _ in clean_ids)
+            found_rows = conn.execute(
+                f"SELECT id FROM rss_feeds WHERE id IN ({placeholders})",
+                clean_ids,
+            ).fetchall()
+            valid_set = {r["id"] for r in found_rows}
+            missing = [fid for fid in clean_ids if fid not in valid_set]
+            if missing:
+                raise AppError(
+                    code="RSS_FEED_NOT_FOUND",
+                    message="Một hoặc nhiều nguồn RSS không tồn tại.",
+                    status_code=404,
+                    details={"missingFeedIds": missing},
+                )
+
+        conn.execute("DELETE FROM project_rss_feeds WHERE project_id = ?", (project_id,))
+        for fid in clean_ids:
+            conn.execute(
+                """
+                INSERT INTO project_rss_feeds (id, project_id, feed_id, linked_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (f"prf-{uuid.uuid4().hex[:10]}", project_id, fid, now),
+            )
+        conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now, project_id))
+        updated = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        assert updated is not None
+        final_feed_ids = _get_linked_feed_ids(conn, project_id)
+    return _row_to_project(updated, final_feed_ids)

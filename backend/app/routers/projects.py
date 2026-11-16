@@ -33,6 +33,10 @@ class DeleteProjectRequest(BaseModel):
     confirmName: str
 
 
+class UpdateProjectRssFeedsRequest(BaseModel):
+    feedIds: list[str] = Field(default_factory=list)
+
+
 @router.get("")
 async def get_projects() -> dict[str, object]:
     items = await run_db_sync(project_repo.list_projects)
@@ -81,3 +85,9 @@ async def export_project_json(project_id: str) -> Response:
 @router.post("/{project_id}/delete")
 async def delete_project_confirmed(project_id: str, payload: DeleteProjectRequest) -> dict[str, object]:
     return await run_db_sync(project_repo.delete_project_safely, project_id, payload.confirmName)
+
+
+@router.put("/{project_id}/rss-feeds")
+async def update_project_rss_links(project_id: str, payload: UpdateProjectRssFeedsRequest) -> dict[str, object]:
+    project = await run_db_sync(project_repo.set_project_rss_feeds, project_id, payload.feedIds)
+    return {"project": project}

@@ -24,6 +24,8 @@ export const DEFAULT_VIEW_STATE: ViewFilterState = {
   tab: 'channels',
   page: 1,
   scrollTop: 0,
+  regionCodeFilter: 'VN',
+  categoryFilter: 'all',
 };
 
 export interface NavStoreState {
@@ -390,13 +392,29 @@ export function useScrollContainerSync(
     const el = scrollRef.current;
     if (!el) return undefined;
     isRestoringRef.current = true;
-    const rafId = window.requestAnimationFrame(() => {
+    let cancelled = false;
+    let rafId = 0;
+    let attempts = 0;
+
+    const applyTarget = () => {
+      if (cancelled) return;
+      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+      if (targetScrollTop > 0 && maxScroll < targetScrollTop && attempts < 14) {
+        attempts += 1;
+        rafId = window.requestAnimationFrame(applyTarget);
+        return;
+      }
       el.scrollTop = targetScrollTop;
-      window.requestAnimationFrame(() => {
-        isRestoringRef.current = false;
+      rafId = window.requestAnimationFrame(() => {
+        if (!cancelled) {
+          isRestoringRef.current = false;
+        }
       });
-    });
+    };
+
+    rafId = window.requestAnimationFrame(applyTarget);
     return () => {
+      cancelled = true;
       window.cancelAnimationFrame(rafId);
       isRestoringRef.current = false;
     };

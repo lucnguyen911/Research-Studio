@@ -2,6 +2,8 @@ import { createContext, useContext } from 'react';
 import type {
   PurgeCacheResultDto,
   QuotaStatusDto,
+  RssFeedDto,
+  RssRefreshAllResultDto,
   SystemSettingsDto,
   UpdateSystemSettingsPayload,
 } from '../api/types';
@@ -18,20 +20,16 @@ import type {
   ScreenId,
   ThemeMode,
   UiSimulatorMode,
+  VideoItem,
 } from '../prototype/types';
 
+// Remaining screens awaiting Milestone 4 (Idea Workspace) and Milestone 5 (P2/P3/P4)
 const DEMO_PREVIEW_SCREENS = new Set<ScreenId>([
-  'global-trends',
-  'global-search',
-  'global-news',
   'global-ideas',
   'project-competitors',
   'project-breakout',
   'project-keywords',
   'project-ideas',
-  'channel-detail',
-  'video-detail',
-  'article-detail',
   'idea-detail',
 ]);
 
@@ -68,6 +66,7 @@ export interface PrototypeWorkspaceContextValue {
   lastSyncAt: string | null;
   systemSettings: SystemSettingsDto;
   quotaStatus: QuotaStatusDto;
+  syncQuotaStatus: () => Promise<void>;
   refreshWorkspaceStatus: () => Promise<boolean>;
 
   projects: ProjectItem[];
@@ -79,6 +78,7 @@ export interface PrototypeWorkspaceContextValue {
     targetFormat: ProjectItem['targetFormat'];
   }) => Promise<ProjectItem | null>;
   updateProject: (projectId: string, patch: Partial<ProjectItem>) => Promise<boolean>;
+  updateProjectRssFeeds: (projectId: string, feedIds: string[]) => Promise<boolean>;
   exportProjectJson: (projectId: string, fallbackName: string) => Promise<boolean>;
   deleteProject: (projectId: string, confirmName: string) => Promise<boolean>;
 
@@ -88,22 +88,30 @@ export interface PrototypeWorkspaceContextValue {
   removeApiKey: () => Promise<boolean>;
   purgeYoutubeCache: () => Promise<PurgeCacheResultDto | null>;
 
-  // Derived compatibility flags & preview helpers (remaining DEMO screens cleared in M3-M5)
+  // Real YouTube in-memory registry & SQLite-backed manual format labels
+  cachedVideosById: Record<string, VideoItem>;
+  registerVideosInMemory: (videos: VideoItem[]) => void;
+  manualFormatMap: Record<string, ManualFormatLabel>;
+  setManualFormat: (videoId: string, label: ManualFormatLabel) => Promise<boolean>;
+
+  // Real SQLite-backed RSS state
+  rssFeedDtos: RssFeedDto[];
+  rssFeeds: RssFeedItem[];
+  reloadRssFeeds: (signal?: AbortSignal) => Promise<RssFeedDto[]>;
+  addRssFeed: (url: string, name: string, groupTag?: string) => Promise<RssFeedDto | null>;
+  toggleRssFeedEnabled: (feedId: string, nextEnabled?: boolean) => Promise<boolean>;
+  retryRssFeed: (feedId: string, signal?: AbortSignal) => Promise<boolean>;
+  deleteRssFeed: (feedId: string) => Promise<boolean>;
+  refreshAllRssFeeds: (signal?: AbortSignal) => Promise<RssRefreshAllResultDto | null>;
+
+  // Remaining M4/M5 preview helpers (replaced in T13-T17)
   channels: ChannelItem[];
   addChannelToProject: (projectId: string, handleOrUrl: string) => void;
   removeChannelFromProject: (projectId: string, channelId: string) => void;
 
-  manualFormatMap: Record<string, ManualFormatLabel>;
-  setManualFormat: (videoId: string, label: ManualFormatLabel) => void;
-
   breakoutByProject: Record<string, Record<string, { flagged: boolean; note: string }>>;
   toggleBreakoutFlag: (projectId: string, videoId: string) => void;
   setBreakoutNote: (projectId: string, videoId: string, note: string) => void;
-
-  rssFeeds: RssFeedItem[];
-  toggleRssFeedEnabled: (feedId: string) => void;
-  retryRssFeed: (feedId: string) => void;
-  addRssFeed: (url: string, name: string) => void;
 
   keywords: KeywordItem[];
   addKeyword: (projectId: string, keyword: string, priority: IdeaPriority) => void;

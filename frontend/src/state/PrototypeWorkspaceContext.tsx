@@ -2,33 +2,38 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ApiClientError,
   createProjectApi,
+  createRssFeedApi,
   deleteProjectApi,
+  deleteRssFeedApi,
   deleteYoutubeApiKeyApi,
   exportProjectJsonApi,
   fetchProjectsApi,
   fetchQuotaStatus,
+  fetchRssFeedsApi,
   fetchSystemSettings,
   isAbortError,
   purgeYoutubeCacheApi,
+  refreshAllRssFeedsApi,
+  refreshSingleRssFeedApi,
   saveYoutubeApiKeyApi,
   setLegalConsentApi,
+  setManualVideoFormatApi,
   updateProjectApi,
+  updateProjectRssFeedsApi,
+  updateRssFeedApi,
   updateSystemSettingsApi,
 } from '../api/client';
+import { mapRssFeedDtoToItem } from '../api/mappers';
 import type {
   ProjectDto,
   PurgeCacheResultDto,
   QuotaStatusDto,
+  RssFeedDto,
+  RssRefreshAllResultDto,
   SystemSettingsDto,
   UpdateSystemSettingsPayload,
 } from '../api/types';
-import {
-  DEMO_CHANNELS,
-  DEMO_IDEAS,
-  DEMO_KEYWORDS,
-  DEMO_RSS_FEEDS,
-  DEMO_VIDEOS,
-} from '../prototype/demoData';
+import { DEMO_CHANNELS, DEMO_IDEAS, DEMO_KEYWORDS } from '../prototype/demoData';
 import type {
   ChannelItem,
   IdeaItem,
@@ -37,9 +42,9 @@ import type {
   KeywordItem,
   ManualFormatLabel,
   ProjectItem,
-  RssFeedItem,
   ThemeMode,
   UiSimulatorMode,
+  VideoItem,
 } from '../prototype/types';
 import {
   PrototypeWorkspaceContext,
@@ -150,22 +155,16 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
   const [systemSettings, setSystemSettings] = useState<SystemSettingsDto>(DEFAULT_SYSTEM_SETTINGS);
   const [quotaStatus, setQuotaStatus] = useState<QuotaStatusDto>(DEFAULT_QUOTA_STATUS);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [rssFeedDtos, setRssFeedDtos] = useState<RssFeedDto[]>([]);
 
-  // Legacy preview states strictly kept in-memory for screens wired later in M3-M5
+  const [cachedVideosById, setCachedVideosById] = useState<Record<string, VideoItem>>({});
+  const [manualFormatMap, setManualFormatMap] = useState<Record<string, ManualFormatLabel>>({});
+
+  // Remaining M4/M5 preview states (replaced cleanly in T13-T17)
   const [previewUiMode, setPreviewUiMode] = useState<UiSimulatorMode>('normal');
   const [channels, setChannels] = useState<ChannelItem[]>(DEMO_CHANNELS);
-  const [rssFeeds, setRssFeeds] = useState<RssFeedItem[]>(DEMO_RSS_FEEDS);
   const [keywords, setKeywords] = useState<KeywordItem[]>(DEMO_KEYWORDS);
   const [ideas, setIdeas] = useState<IdeaItem[]>(DEMO_IDEAS);
-  const [manualFormatMap, setManualFormatMap] = useState<Record<string, ManualFormatLabel>>(() => {
-    const initial: Record<string, ManualFormatLabel> = {};
-    for (const v of DEMO_VIDEOS) {
-      if (v.defaultManualFormat !== 'none') {
-        initial[v.id] = v.defaultManualFormat;
-      }
-    }
-    return initial;
-  });
   const [breakoutByProject, setBreakoutByProject] = useState<
     Record<string, Record<string, { flagged: boolean; note: string }>>
   >({});
@@ -190,42 +189,20 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
     setToasts((prev) => [...prev.slice(-3), { id, kind, message }]);
   }, []);
 
-  const syncFromBackend = useCallback(async (signal?: AbortSignal): Promise<boolean> => {
-    try {
-      const [settingsRes, quotaRes, projectListRes] = await Promise.all([
-        fetchSystemSettings(signal),
-        fetchQuotaStatus(signal),
-        fetchProjectsApi(signal),
-      ]);
-      setSystemSettings(settingsRes);
-      setQuotaStatus(quotaRes);
-      setProjects(projectListRes.map(dtoToProjectItem));
-      setThemeState(settingsRes.themeMode);
-      applyThemeToDom(settingsRes.themeMode);
-      setBackendOnline(true);
-      setLastSyncAt(new Date().toLocaleTimeString('vi-VN'));
-      return true;
-    } catch (err) {
-      if (isAbortError(err)) return false;
-      setBackendOnline(false);
-      return false;
-    } finally {
-      setIsBootstrapping(false);
-    }
-  }, []);
-
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
       fetchSystemSettings(controller.signal),
       fetchQuotaStatus(controller.signal),
       fetchProjectsApi(controller.signal),
+      fetchRssFeedsApi(controller.signal),
     ])
-      .then(([settingsRes, quotaRes, projectListRes]) => {
+      .then(([settingsRes, quotaRes, projectListRes, feedsRes]) => {
         if (controller.signal.aborted) return;
         setSystemSettings(settingsRes);
         setQuotaStatus(quotaRes);
         setProjects(projectListRes.map(dtoToProjectItem));
+        setRssFeedDtos(feedsRes);
         setThemeState(settingsRes.themeMode);
         applyThemeToDom(settingsRes.themeMode);
         setBackendOnline(true);
@@ -240,6 +217,42 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
     return () => {
       controller.abort();
     };
+  }, []);
+
+  const syncQuotaStatus = useCallback(async (): Promise<void> => {
+    try {
+      const q = await fetchQuotaStatus();
+      setQuotaStatus(q);
+      setBackendOnline(true);
+    } catch {
+      // Non-fatal background sync
+    }
+  }, []);
+
+  const syncFromBackend = useCallback(async (signal?: AbortSignal): Promise<boolean> => {
+    try {
+      const [settingsRes, quotaRes, projectListRes, feedsRes] = await Promise.all([
+        fetchSystemSettings(signal),
+        fetchQuotaStatus(signal),
+        fetchProjectsApi(signal),
+        fetchRssFeedsApi(signal),
+      ]);
+      setSystemSettings(settingsRes);
+      setQuotaStatus(quotaRes);
+      setProjects(projectListRes.map(dtoToProjectItem));
+      setRssFeedDtos(feedsRes);
+      setThemeState(settingsRes.themeMode);
+      applyThemeToDom(settingsRes.themeMode);
+      setBackendOnline(true);
+      setLastSyncAt(new Date().toLocaleTimeString('vi-VN'));
+      return true;
+    } catch (err) {
+      if (isAbortError(err)) return false;
+      setBackendOnline(false);
+      return false;
+    } finally {
+      setIsBootstrapping(false);
+    }
   }, []);
 
   const refreshWorkspaceStatus = useCallback(async (): Promise<boolean> => {
@@ -355,6 +368,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
     try {
       const result = await purgeYoutubeCacheApi();
       setApiCachePurged(true);
+      setCachedVideosById({});
       setBackendOnline(true);
       pushToast(
         'success',
@@ -425,6 +439,24 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
     [pushToast],
   );
 
+  const updateProjectRssFeeds = useCallback(
+    async (projectId: string, feedIds: string[]): Promise<boolean> => {
+      try {
+        const updatedDto = await updateProjectRssFeedsApi(projectId, feedIds);
+        const updated = dtoToProjectItem(updatedDto);
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
+        setBackendOnline(true);
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể lưu liên kết RSS cho Project.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
+
   const exportProjectJson = useCallback(
     async (projectId: string, fallbackName: string): Promise<boolean> => {
       try {
@@ -462,12 +494,178 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
     [pushToast],
   );
 
-  // Legacy preview helpers solely for DEMO preview screens prior to M3-M5 integration
-  const setManualFormat = (videoId: string, label: ManualFormatLabel) => {
-    setManualFormatMap((prev) => ({ ...prev, [videoId]: label }));
-    pushToast('success', 'Đã cập nhật nhãn thử nghiệm xem trước (sẽ nối SQLite ở M3).');
-  };
+  const registerVideosInMemory = useCallback((videos: VideoItem[]) => {
+    if (videos.length === 0) return;
+    setCachedVideosById((prev) => {
+      const next = { ...prev };
+      for (const v of videos) {
+        next[v.id] = v;
+      }
+      return next;
+    });
+    setManualFormatMap((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const v of videos) {
+        if (v.defaultManualFormat !== 'none' && next[v.id] !== v.defaultManualFormat) {
+          next[v.id] = v.defaultManualFormat;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    setApiCachePurged(false);
+  }, []);
 
+  const setManualFormat = useCallback(
+    async (videoId: string, label: ManualFormatLabel): Promise<boolean> => {
+      const payload = label === 'none' ? null : label;
+      try {
+        await setManualVideoFormatApi(videoId, payload);
+        setManualFormatMap((prev) => {
+          const next = { ...prev };
+          if (label === 'none') {
+            delete next[videoId];
+          } else {
+            next[videoId] = label;
+          }
+          return next;
+        });
+        setCachedVideosById((prev) => {
+          const existing = prev[videoId];
+          if (!existing) return prev;
+          return { ...prev, [videoId]: { ...existing, defaultManualFormat: label } };
+        });
+        pushToast(
+          'success',
+          label === 'none'
+            ? 'Đã xóa nhãn thủ công (giữ nguyên xác minh từ nguồn YouTube API).'
+            : `Đã lưu nhãn thủ công vào SQLite: ${label === 'long_form' ? 'Video dài' : 'Shorts'}`,
+        );
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể cập nhật nhãn định dạng thủ công.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
+
+  const reloadRssFeeds = useCallback(async (signal?: AbortSignal): Promise<RssFeedDto[]> => {
+    const items = await fetchRssFeedsApi(signal);
+    setRssFeedDtos(items);
+    setBackendOnline(true);
+    return items;
+  }, []);
+
+  const addRssFeed = useCallback(
+    async (url: string, name: string, groupTag = ''): Promise<RssFeedDto | null> => {
+      try {
+        const created = await createRssFeedApi({ name: name.trim(), url: url.trim(), groupTag });
+        setRssFeedDtos((prev) => [created, ...prev]);
+        setBackendOnline(true);
+        pushToast('success', `Đã thêm nguồn RSS "${created.name}" (0 quota YouTube).`);
+        return created;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể thêm nguồn RSS.'));
+        }
+        return null;
+      }
+    },
+    [pushToast],
+  );
+
+  const toggleRssFeedEnabled = useCallback(
+    async (feedId: string, nextEnabled?: boolean): Promise<boolean> => {
+      const target = rssFeedDtos.find((f) => f.id === feedId);
+      const desired = nextEnabled !== undefined ? nextEnabled : !(target?.enabled ?? true);
+      try {
+        const updated = await updateRssFeedApi(feedId, { enabled: desired });
+        setRssFeedDtos((prev) => prev.map((f) => (f.id === feedId ? updated : f)));
+        pushToast('success', desired ? `Đã bật lại nguồn "${updated.name}".` : `Đã tạm tắt nguồn "${updated.name}".`);
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể thay đổi trạng thái nguồn RSS.'));
+        }
+        return false;
+      }
+    },
+    [pushToast, rssFeedDtos],
+  );
+
+  const retryRssFeed = useCallback(
+    async (feedId: string, signal?: AbortSignal): Promise<boolean> => {
+      try {
+        const res = await refreshSingleRssFeedApi(feedId, signal);
+        setRssFeedDtos((prev) => prev.map((f) => (f.id === feedId ? res.feed : f)));
+        if (res.status === 'ok') {
+          pushToast(
+            'success',
+            `Nguồn "${res.feed.name}" đã nạp ${res.insertedCount ?? 0} bài mới (0 quota YouTube).`,
+          );
+          return true;
+        }
+        pushToast('error', `Nguồn "${res.feed.name}" gặp lỗi cô lập: ${res.errorMessage ?? res.errorCode ?? 'Lỗi tải RSS'}`);
+        return false;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể làm mới nguồn RSS.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
+
+  const deleteRssFeed = useCallback(
+    async (feedId: string): Promise<boolean> => {
+      try {
+        await deleteRssFeedApi(feedId);
+        setRssFeedDtos((prev) => prev.filter((f) => f.id !== feedId));
+        setProjects((prev) =>
+          prev.map((p) => ({ ...p, linkedFeedIds: p.linkedFeedIds.filter((fid) => fid !== feedId) })),
+        );
+        pushToast('success', 'Đã xóa nguồn RSS khỏi danh sách.');
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể xóa nguồn RSS.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
+
+  const refreshAllRssFeeds = useCallback(
+    async (signal?: AbortSignal): Promise<RssRefreshAllResultDto | null> => {
+      try {
+        const summary = await refreshAllRssFeedsApi(signal);
+        await reloadRssFeeds(signal);
+        if (summary.errorCount > 0) {
+          pushToast(
+            'error',
+            `Đã làm mới ${summary.okCount}/${summary.refreshedCount} nguồn RSS (${summary.errorCount} nguồn lỗi đã được cô lập riêng).`,
+          );
+        } else {
+          pushToast('success', `Đã làm mới xong ${summary.okCount} nguồn RSS đang bật (0 quota YouTube).`);
+        }
+        return summary;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể làm mới danh sách nguồn RSS.'));
+        }
+        return null;
+      }
+    },
+    [pushToast, reloadRssFeeds],
+  );
+
+  // Legacy preview helpers solely for remaining M4/M5 DEMO preview screens
   const toggleBreakoutFlag = (projectId: string, videoId: string) => {
     setBreakoutByProject((prev) => {
       const projMap = prev[projectId] ?? {};
@@ -493,51 +691,27 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
   const addChannelToProject = (projectId: string, handleOrUrl: string) => {
     const cleaned = handleOrUrl.trim();
     if (!cleaned) return;
-    const newCh: ChannelItem = {
-      id: `ch-${Date.now().toString(36)}`,
-      title: cleaned,
-      handle: cleaned.startsWith('@') ? cleaned : `@${cleaned.slice(0, 18)}`,
-      subscriberCount: 0,
-      videoCount: 0,
-      country: 'VN',
-      projectIds: [projectId],
-      projectNotes: { [projectId]: 'Xem trước giao diện M5' },
-      lastFetchedAt: 'DEMO',
-      statusByProject: { [projectId]: 'active' },
-    };
-    setChannels((prev) => [newCh, ...prev]);
+    setChannels((prev) => [
+      {
+        id: `ch-${Date.now().toString(36)}`,
+        title: cleaned,
+        handle: cleaned.startsWith('@') ? cleaned : `@${cleaned.slice(0, 18)}`,
+        subscriberCount: 0,
+        videoCount: 0,
+        country: 'VN',
+        projectIds: [projectId],
+        projectNotes: { [projectId]: 'Xem trước M5' },
+        lastFetchedAt: 'DEMO',
+        statusByProject: { [projectId]: 'active' },
+      },
+      ...prev,
+    ]);
   };
 
   const removeChannelFromProject = (projectId: string, channelId: string) => {
     setChannels((prev) =>
       prev.map((c) => (c.id === channelId ? { ...c, projectIds: c.projectIds.filter((pid) => pid !== projectId) } : c)),
     );
-  };
-
-  const toggleRssFeedEnabled = (feedId: string) => {
-    setRssFeeds((prev) => prev.map((f) => (f.id === feedId ? { ...f, enabled: !f.enabled } : f)));
-  };
-
-  const retryRssFeed = (feedId: string) => {
-    setRssFeeds((prev) => prev.map((f) => (f.id === feedId ? { ...f, status: 'ok' } : f)));
-  };
-
-  const addRssFeed = (url: string, name: string) => {
-    const cleanedUrl = url.trim();
-    if (!cleanedUrl.startsWith('http://') && !cleanedUrl.startsWith('https://')) {
-      pushToast('error', 'URL RSS không hợp lệ: chỉ chấp nhận https:// hoặc http://.');
-      return;
-    }
-    const newFeed: RssFeedItem = {
-      id: `feed-${Date.now().toString(36)}`,
-      name: name.trim() || cleanedUrl,
-      url: cleanedUrl,
-      groupTag: 'Xem trước',
-      enabled: true,
-      status: 'ok',
-      lastFetchedAt: 'DEMO',
-    };
-    setRssFeeds((prev) => [newFeed, ...prev]);
   };
 
   const addKeyword = (projectId: string, keyword: string, priority: IdeaPriority) => {
@@ -594,7 +768,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
       projectLinks: links,
     };
     setIdeas((prev) => [item, ...prev]);
-    pushToast('success', 'Đã thêm vào bộ xem trước Ý tưởng (sẽ lưu SQLite thật ở M4).');
+    pushToast('success', 'Đã thêm vào bộ xem trước Ý tưởng (sẽ nối SQLite thật ở M4).');
   };
 
   const updateProjectIdeaStatus = (ideaId: string, projectId: string, status: IdeaStatus) => {
@@ -689,10 +863,12 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         lastSyncAt,
         systemSettings,
         quotaStatus,
+        syncQuotaStatus,
         refreshWorkspaceStatus,
         projects,
         createProject,
         updateProject,
+        updateProjectRssFeeds,
         exportProjectJson,
         deleteProject,
         updateSystemPreferences,
@@ -700,18 +876,24 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         saveApiKey,
         removeApiKey,
         purgeYoutubeCache,
+        cachedVideosById,
+        registerVideosInMemory,
+        manualFormatMap,
+        setManualFormat,
+        rssFeedDtos,
+        rssFeeds: rssFeedDtos.map(mapRssFeedDtoToItem),
+        reloadRssFeeds,
+        addRssFeed,
+        toggleRssFeedEnabled,
+        retryRssFeed,
+        deleteRssFeed,
+        refreshAllRssFeeds,
         channels,
         addChannelToProject,
         removeChannelFromProject,
-        manualFormatMap,
-        setManualFormat,
         breakoutByProject,
         toggleBreakoutFlag,
         setBreakoutNote,
-        rssFeeds,
-        toggleRssFeedEnabled,
-        retryRssFeed,
-        addRssFeed,
         keywords,
         addKeyword,
         deleteKeyword,

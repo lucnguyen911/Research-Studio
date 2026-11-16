@@ -1,13 +1,25 @@
 import type {
   ApiErrorEnvelope,
+  ChannelDetailResponseDto,
   CreateProjectPayload,
   DeleteProjectResultDto,
+  FreeSearchResponseDto,
   ProjectDto,
   PurgeCacheResultDto,
   QuotaStatusDto,
+  RssArticleDto,
+  RssFeedDto,
+  RssPhrasesResponseDto,
+  RssRefreshAllResultDto,
+  RssSingleRefreshResultDto,
+  SearchSessionDetailDto,
+  SearchSessionDto,
   SystemSettingsDto,
+  TrendsResponseDto,
   UpdateProjectPayload,
   UpdateSystemSettingsPayload,
+  VideoDetailResponseDto,
+  YoutubeCategoryDto,
 } from './types';
 
 export const CSRF_HEADER_NAME = 'X-Research-Studio-Client';
@@ -262,3 +274,235 @@ export async function deleteProjectApi(
     signal,
   });
 }
+
+export async function updateProjectRssFeedsApi(
+  projectId: string,
+  feedIds: string[],
+  signal?: AbortSignal,
+): Promise<ProjectDto> {
+  const res = await apiRequest<{ project: ProjectDto }>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/rss-feeds`,
+    {
+      method: 'PUT',
+      body: { feedIds },
+      signal,
+    },
+  );
+  return res.project;
+}
+
+export async function fetchGlobalCategoriesApi(
+  options?: { refresh?: boolean; regionCode?: string; language?: string; signal?: AbortSignal },
+): Promise<{ items: YoutubeCategoryDto[]; source: string }> {
+  const qs = new URLSearchParams();
+  if (options?.refresh) qs.set('refresh', 'true');
+  if (options?.regionCode) qs.set('regionCode', options.regionCode);
+  if (options?.language) qs.set('language', options.language);
+  const queryStr = qs.toString();
+  return apiRequest<{ items: YoutubeCategoryDto[]; source: string }>(
+    `/api/v1/global/categories${queryStr ? `?${queryStr}` : ''}`,
+    { signal: options?.signal },
+  );
+}
+
+export async function fetchCachedTrendsApi(
+  regionCode = 'VN',
+  categoryId = 'all',
+  signal?: AbortSignal,
+): Promise<TrendsResponseDto> {
+  const qs = new URLSearchParams({ regionCode, categoryId });
+  return apiRequest<TrendsResponseDto>(`/api/v1/global/trends?${qs.toString()}`, { signal });
+}
+
+export async function refreshGlobalTrendsApi(
+  payload: { regionCode: string; categoryId: string; maxResults?: number },
+  signal?: AbortSignal,
+): Promise<TrendsResponseDto> {
+  return apiRequest<TrendsResponseDto>('/api/v1/global/trends/refresh', {
+    method: 'POST',
+    body: payload,
+    signal,
+  });
+}
+
+export async function fetchSearchSessionsApi(signal?: AbortSignal): Promise<SearchSessionDto[]> {
+  const res = await apiRequest<{ items: SearchSessionDto[] }>('/api/v1/global/search/sessions', { signal });
+  return res.items;
+}
+
+export async function fetchSearchSessionDetailApi(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<SearchSessionDetailDto> {
+  return apiRequest<SearchSessionDetailDto>(
+    `/api/v1/global/search/sessions/${encodeURIComponent(sessionId)}`,
+    { signal },
+  );
+}
+
+export async function runFreeSearchApi(
+  payload: {
+    query: string;
+    objectType?: 'video' | 'channel';
+    regionCode: string;
+    relevanceLanguage: string;
+    publishedAfter?: string | null;
+    orderBy: 'relevance' | 'date' | 'viewCount' | 'rating';
+    maxResults?: number;
+  },
+  signal?: AbortSignal,
+): Promise<FreeSearchResponseDto> {
+  return apiRequest<FreeSearchResponseDto>('/api/v1/global/search', {
+    method: 'POST',
+    body: payload,
+    signal,
+  });
+}
+
+export async function fetchVideoDetailApi(
+  videoId: string,
+  projectId?: string | null,
+  signal?: AbortSignal,
+): Promise<VideoDetailResponseDto> {
+  const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+  return apiRequest<VideoDetailResponseDto>(
+    `/api/v1/youtube/videos/${encodeURIComponent(videoId)}${qs}`,
+    { signal },
+  );
+}
+
+export async function setManualVideoFormatApi(
+  videoId: string,
+  manualFormat: 'long_form' | 'shorts' | null,
+  signal?: AbortSignal,
+): Promise<{ videoId: string; manualFormat: 'long_form' | 'shorts' | null; updatedAt: string }> {
+  return apiRequest(`/api/v1/youtube/videos/${encodeURIComponent(videoId)}/manual-format`, {
+    method: 'PUT',
+    body: { manualFormat },
+    signal,
+  });
+}
+
+export async function fetchChannelDetailApi(
+  channelId: string,
+  signal?: AbortSignal,
+): Promise<ChannelDetailResponseDto> {
+  return apiRequest<ChannelDetailResponseDto>(
+    `/api/v1/youtube/channels/${encodeURIComponent(channelId)}`,
+    { signal },
+  );
+}
+
+export async function fetchRssFeedsApi(signal?: AbortSignal): Promise<RssFeedDto[]> {
+  const res = await apiRequest<{ items: RssFeedDto[] }>('/api/v1/rss/feeds', { signal });
+  return res.items;
+}
+
+export async function createRssFeedApi(
+  payload: { name: string; url: string; groupTag?: string },
+  signal?: AbortSignal,
+): Promise<RssFeedDto> {
+  const res = await apiRequest<{ feed: RssFeedDto }>('/api/v1/rss/feeds', {
+    method: 'POST',
+    body: payload,
+    signal,
+  });
+  return res.feed;
+}
+
+export async function updateRssFeedApi(
+  feedId: string,
+  patch: { name?: string; groupTag?: string; enabled?: boolean },
+  signal?: AbortSignal,
+): Promise<RssFeedDto> {
+  const res = await apiRequest<{ feed: RssFeedDto }>(`/api/v1/rss/feeds/${encodeURIComponent(feedId)}`, {
+    method: 'PUT',
+    body: patch,
+    signal,
+  });
+  return res.feed;
+}
+
+export async function deleteRssFeedApi(feedId: string, signal?: AbortSignal): Promise<void> {
+  await apiRequest<{ deletedFeedId: string }>(`/api/v1/rss/feeds/${encodeURIComponent(feedId)}`, {
+    method: 'DELETE',
+    signal,
+  });
+}
+
+export async function refreshSingleRssFeedApi(
+  feedId: string,
+  signal?: AbortSignal,
+): Promise<RssSingleRefreshResultDto> {
+  return apiRequest<RssSingleRefreshResultDto>(
+    `/api/v1/rss/feeds/${encodeURIComponent(feedId)}/refresh`,
+    { method: 'POST', signal },
+  );
+}
+
+export async function refreshAllRssFeedsApi(signal?: AbortSignal): Promise<RssRefreshAllResultDto> {
+  return apiRequest<RssRefreshAllResultDto>('/api/v1/rss/refresh', {
+    method: 'POST',
+    signal,
+  });
+}
+
+export async function fetchRssArticlesApi(
+  options?: {
+    feedId?: string;
+    projectId?: string;
+    onlyBookmarked?: boolean;
+    search?: string;
+    limit?: number;
+  },
+  signal?: AbortSignal,
+): Promise<{ items: RssArticleDto[]; sourceLabel: string }> {
+  const qs = new URLSearchParams();
+  if (options?.feedId && options.feedId !== 'all') qs.set('feedId', options.feedId);
+  if (options?.projectId) qs.set('projectId', options.projectId);
+  if (options?.onlyBookmarked) qs.set('onlyBookmarked', 'true');
+  if (options?.search?.trim()) qs.set('search', options.search.trim());
+  if (options?.limit) qs.set('limit', String(options.limit));
+  const query = qs.toString();
+  return apiRequest(`/api/v1/rss/articles${query ? `?${query}` : ''}`, { signal });
+}
+
+export async function fetchRssArticleDetailApi(
+  articleId: string,
+  signal?: AbortSignal,
+): Promise<RssArticleDto> {
+  const res = await apiRequest<{ article: RssArticleDto }>(
+    `/api/v1/rss/articles/${encodeURIComponent(articleId)}`,
+    { signal },
+  );
+  return res.article;
+}
+
+export async function updateRssArticleApi(
+  articleId: string,
+  patch: { bookmarked?: boolean; userNotes?: string },
+  signal?: AbortSignal,
+): Promise<RssArticleDto> {
+  const res = await apiRequest<{ article: RssArticleDto }>(
+    `/api/v1/rss/articles/${encodeURIComponent(articleId)}`,
+    {
+      method: 'PUT',
+      body: patch,
+      signal,
+    },
+  );
+  return res.article;
+}
+
+export async function fetchRssPhrasesApi(
+  options?: { projectId?: string; days?: number; limit?: number },
+  signal?: AbortSignal,
+): Promise<RssPhrasesResponseDto> {
+  const qs = new URLSearchParams();
+  if (options?.projectId) qs.set('projectId', options.projectId);
+  if (options?.days) qs.set('days', String(options.days));
+  if (options?.limit) qs.set('limit', String(options.limit));
+  const query = qs.toString();
+  return apiRequest<RssPhrasesResponseDto>(`/api/v1/rss/phrases${query ? `?${query}` : ''}`, { signal });
+}
+

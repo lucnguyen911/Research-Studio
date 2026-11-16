@@ -83,6 +83,8 @@ export interface VideoItem {
   channelId: string;
   channelTitle: string;
   title: string;
+  thumbnailUrl?: string | null;
+  hasValidApiData?: boolean;
   publishedAt: string;
   daysAgo: number;
   durationSeconds: number;
@@ -212,6 +214,8 @@ export interface ViewFilterState {
   tab: string;
   page: number;
   scrollTop: number;
+  regionCodeFilter?: string;
+  categoryFilter?: string;
 }
 
 export interface NavHistoryEntry {

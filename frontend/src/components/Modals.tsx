@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DEMO_VIDEOS, formatInt } from '../prototype/demoData';
+import { formatInt } from '../prototype/demoData';
 import type { ProjectItem } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
 import { usePrototypeWorkspace, type SaveIdeaDraft } from '../state/workspaceContext';
@@ -391,12 +391,26 @@ export const LegalConsentModal: React.FC = () => {
 };
 
 export const VideoInspectorDrawer: React.FC = () => {
-  const { inspectorVideoId, openInspectorVideo, openSaveIdeaModal } = usePrototypeWorkspace();
+  const { inspectorVideoId, openInspectorVideo, openSaveIdeaModal, cachedVideosById } = usePrototypeWorkspace();
   const { navigate } = useAppNavigation();
   if (!inspectorVideoId) return null;
 
-  const video = DEMO_VIDEOS.find((v) => v.id === inspectorVideoId);
-  if (!video) return null;
+  const video = cachedVideosById[inspectorVideoId];
+  if (!video) {
+    return (
+      <aside className="rs-drawer" aria-label="Panel xem nhanh video">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <strong>Xem nhanh Video (Inspector)</strong>
+          <button type="button" className="rs-btn rs-btn-ghost rs-btn-sm" onClick={() => openInspectorVideo(null)}>
+            Đóng ×
+          </button>
+        </div>
+        <div className="rs-card" style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)' }}>
+          Không còn dữ liệu video trong phiên hiện tại. Bạn có thể mở trang Chi tiết đầy đủ từ danh sách nguồn.
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside className="rs-drawer" aria-label="Panel xem nhanh video">

@@ -194,7 +194,7 @@
 - **RISK:** HIGH
 - **USER APPROVAL REQUIRED:** NO
 
-### [ ] T09 — YouTube Data API v3 Client (`0` Auto-Retry trên `search.list`), Cache Thực thể Gốc & API Global Xu hướng / Tự do
+### [x] T09 — YouTube Data API v3 Client (`0` Auto-Retry trên `search.list`), Cache Thực thể Gốc & API Global Xu hướng / Tự do
 - **ID:** T09
 - **TITLE:** YouTube Data API v3 Client (`0` Auto-Retry trên `search.list`), Cache Thực thể Gốc & API Global Xu hướng / Nghiên cứu Tự do
 - **GOAL:** Xây dựng `youtube_client.py` (`httpx`, đặt trước `1` unit cho từng wire attempt và chỉ hoàn trả khi `ConnectError` trước kết nối, **tắt hoàn toàn auto-retry trên `search.list`**, parse `ISO 8601 duration`, map lỗi `403 quotaExceeded`/timeout/hủy) cùng `discovery_service.py` và router `global_research.py` phục vụ `G2. Xu hướng`, `G3. Nghiên cứu tự do`, *Chi tiết Video/Kênh* (luôn lọc `api_expires_at > now AND api_purged_at IS NULL` khi đọc `API Data`) và gán Nhãn định dạng thủ công.
@@ -215,7 +215,7 @@
 - **RISK:** HIGH
 - **USER APPROVAL REQUIRED:** NO
 
-### [ ] T10 — Bộ Thu thập RSS/Atom Chống SSRF/Redirect/XXE (`defusedxml` + `HTMLParser`), Khử trùng lặp, Cô lập Lỗi & Liên kết RSS Project
+### [x] T10 — Bộ Thu thập RSS/Atom Chống SSRF/Redirect/XXE (`defusedxml` + `HTMLParser`), Khử trùng lặp, Cô lập Lỗi & Liên kết RSS Project
 - **ID:** T10
 - **TITLE:** Bộ Thu thập RSS/Atom Chống SSRF/Redirect/XXE (`defusedxml` + `HTMLParser`), Khử trùng lặp, Cô lập Nguồn Lỗi & Liên kết RSS Project
 - **GOAL:** Cài đặt `rss_client.py` (xác thực DNS/IP `.is_global` chặn `127.0.0.1`/LAN/`169.254.169.254`/`::1`, `follow_redirects=False` kiểm tra lại IP ở mỗi redirect `<= 3` bước, streaming `aiter_bytes` cắt ngang vượt `5 MB`, parse XML bằng `defusedxml`, làm sạch HTML qua lớp con `html.parser.HTMLParser` loại bỏ trọn cây `<script>`/`<style>` + `html.unescape`) cùng `rss_repo.py`, `rss_service.py` và router `rss.py` (kèm endpoint gắn/gỡ nguồn RSS cho Project tại `project_rss_feeds` và thống kê cụm từ RSS bằng Python).
@@ -235,7 +235,7 @@
 - **RISK:** HIGH
 - **USER APPROVAL REQUIRED:** NO
 
-### [ ] T11 — Giao diện `G4. Tin tức & thảo luận`, *Chi tiết Bài báo RSS* & Liên kết Nguồn RSS cho Project tại `P6`
+### [x] T11 — Giao diện `G4. Tin tức & thảo luận`, *Chi tiết Bài báo RSS* & Liên kết Nguồn RSS cho Project tại `P6`
 - **ID:** T11
 - **TITLE:** Giao diện `G4. Tin tức & thảo luận`, *Chi tiết Bài báo RSS* & Liên kết Nguồn RSS cho Project tại `P6`
 - **GOAL:** Hoàn thiện hoàn chỉnh luồng RSS trên Frontend (`G4. Tin tức & thảo luận`, quản lý/bật-tắt/làm mới nguồn RSS có Cancel/Retry, hiển thị lỗi cô lập từng nguồn, xem *Chi tiết Bài báo RSS* an toàn thuần văn bản + bảng cụm từ nổi bật gắn nhãn `Nguồn: RSS (Dữ liệu ngoài YouTube)`) và bổ sung khu vực chọn liên kết các nguồn RSS cho Project đang chọn trong `P6. Cài đặt dự án`.
@@ -253,7 +253,7 @@
 - **RISK:** LOW
 - **USER APPROVAL REQUIRED:** NO
 
-### [ ] T12 — Giao diện `G2. Khám phá xu hướng`, `G3. Nghiên cứu tự do`, *Chi tiết Video/Kênh* & Huy hiệu Định dạng 3 Lớp
+### [x] T12 — Giao diện `G2. Khám phá xu hướng`, `G3. Nghiên cứu tự do`, *Chi tiết Video/Kênh* & Huy hiệu Định dạng 3 Lớp
 - **ID:** T12
 - **TITLE:** Giao diện `G2. Khám phá xu hướng`, `G3. Nghiên cứu tự do`, *Chi tiết Video/Kênh* & Huy hiệu Định dạng 3 Lớp
 - **GOAL:** Xây dựng giao diện cho `G2. Khám phá xu hướng`, `G3. Nghiên cứu tự do` (hiển thị dự báo chi phí `1 lượt Search Queries` trước khi tìm, lịch sử phiên tìm còn hạn mở lại `0 quota`), trang *Chi tiết Video* (bảng mốc thô `<= 30 ngày` + tags + tách biệt rõ Định dạng xác minh nguồn / Gợi ý kèm độ tin cậy & căn cứ / Nhãn thủ công của người dùng), trang *Chi tiết Kênh*, và nhận diện YouTube theo Branding Guidelines.
@@ -273,8 +273,8 @@
 - **USER APPROVAL REQUIRED:** NO
 
 ### Checkpoint M3 — Research Data (Runnable Global Discovery & RSS)
-- [ ] Toàn bộ test `T08`–`T12` pass 100%; frontend `typecheck`/`lint`/`build` sạch.
-- [ ] Chạy thử Global Research trên trình duyệt cục bộ: đọc RSS thật (`G4`), gắn nguồn RSS cho Project ở `P6`, xem Xu hướng (`G2`), Tìm tự do (`G3`), xem Chi tiết Video/Kênh, gán Nhãn định dạng thủ công và kiểm tra đồng hồ Quota 2 bucket (`PT`).
+- [x] Toàn bộ test `T08`–`T12` pass 100%; frontend `typecheck`/`lint`/`build` sạch.
+- [x] Chạy thử Global Research trên trình duyệt cục bộ: đọc RSS thật (`G4`), gắn nguồn RSS cho Project ở `P6`, xem Xu hướng (`G2`), Tìm tự do (`G3`), xem Chi tiết Video/Kênh, gán Nhãn định dạng thủ công và kiểm tra đồng hồ Quota 2 bucket (`PT`).
 
 ---
 

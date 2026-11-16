@@ -56,8 +56,9 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
   const getEffectiveFormatCount = (fmt: 'long_form' | 'shorts' | 'unknown') =>
     videos.filter((v) => {
       if (v.sourceFormatStatus === fmt) return true;
+      const manual = manualFormatMap[v.id] ?? v.defaultManualFormat ?? 'none';
       if (vs.includeManualInFormat && fmt !== 'unknown') {
-        return manualFormatMap[v.id] === fmt;
+        return manual === fmt;
       }
       return false;
     }).length;
@@ -83,12 +84,13 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
     }
     if (vs.formatFilter !== 'all') {
       const matchesSource = v.sourceFormatStatus === vs.formatFilter;
+      const manual = manualFormatMap[v.id] ?? v.defaultManualFormat ?? 'none';
       const matchesManual =
-        vs.includeManualInFormat && vs.formatFilter !== 'unknown' && manualFormatMap[v.id] === vs.formatFilter;
+        vs.includeManualInFormat && vs.formatFilter !== 'unknown' && manual === vs.formatFilter;
       if (!matchesSource && !matchesManual) return false;
     }
     if (vs.manualFilter !== 'all') {
-      const label = manualFormatMap[v.id] ?? 'none';
+      const label = manualFormatMap[v.id] ?? v.defaultManualFormat ?? 'none';
       if (vs.manualFilter === 'unlabeled' && label !== 'none') return false;
       if (vs.manualFilter !== 'unlabeled' && label !== vs.manualFilter) return false;
     }
@@ -309,8 +311,17 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                   <tr key={v.id}>
                     <td style={{ minWidth: 250 }}>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                        <div className="rs-thumb" aria-hidden="true" style={{ width: 92, height: 52 }}>
-                          <span>YT</span>
+                        <div className="rs-thumb" aria-hidden="true" style={{ width: 92, height: 52, position: 'relative' }}>
+                          {v.thumbnailUrl ? (
+                            <img
+                              src={v.thumbnailUrl}
+                              alt=""
+                              loading="lazy"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
+                            />
+                          ) : (
+                            <span>YT</span>
+                          )}
                           <span className="rs-thumb-dur">{v.durationDisplay}</span>
                         </div>
                         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>

@@ -14,7 +14,8 @@ export const FormatBadgeGroup: React.FC<FormatBadgeGroupProps> = ({
   showManualControl = true,
 }) => {
   const { manualFormatMap, setManualFormat } = usePrototypeWorkspace();
-  const manualLabel: ManualFormatLabel = manualFormatMap[video.id] ?? 'none';
+  const [saving, setSaving] = React.useState(false);
+  const manualLabel: ManualFormatLabel = manualFormatMap[video.id] ?? video.defaultManualFormat ?? 'none';
 
   const sourceBadge =
     video.sourceFormatStatus === 'long_form'
@@ -55,7 +56,18 @@ export const FormatBadgeGroup: React.FC<FormatBadgeGroupProps> = ({
         <select
           aria-label={`Nhãn thủ công cho ${video.title}`}
           value={manualLabel}
-          onChange={(e) => setManualFormat(video.id, e.target.value as ManualFormatLabel)}
+          disabled={saving}
+          onChange={(e) => {
+            const val = e.target.value as ManualFormatLabel;
+            void (async () => {
+              setSaving(true);
+              try {
+                await setManualFormat(video.id, val);
+              } finally {
+                setSaving(false);
+              }
+            })();
+          }}
           className="rs-select rs-select-compact"
         >
           <option value="none">Gắn nhãn thủ công...</option>

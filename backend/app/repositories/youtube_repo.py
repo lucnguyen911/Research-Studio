@@ -386,3 +386,126 @@ def get_channel_record(
         "apiFetchedAt": row["api_fetched_at"] if has_valid_api else None,
         "apiExpiresAt": expires if has_valid_api else None,
     }
+
+
+def _load_snapshots_map(
+    conn: sqlite3.Connection,
+    video_ids: list[str],
+    now_iso: str,
+) -> dict[str, list[dict[str, Any]]]:
+    if not video_ids:
+        return {}
+    placeholders = ",".join("?" for _ in video_ids)
+    rows = conn.execute(
+        f"""
+        SELECT video_id, captured_at, view_count, like_count, comment_count
+        FROM youtube_video_snapshots
+        WHERE video_id IN ({placeholders}) AND api_expires_at > ?
+        ORDER BY captured_at ASC
+        """,
+        (*video_ids, now_iso),
+    ).fetchall()
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for sr in rows:
+        grouped.setdefault(sr["video_id"], []).append(
+            {
+                "capturedAt": sr["captured_at"],
+                "viewCount": sr["view_count"],
+                "likeCount": sr["like_count"],
+                "commentCount": sr["comment_count"],
+            }
+        )
+    return grouped
+
+
+def get_valid_videos_by_ids(
+    conn: sqlite3.Connection,
+    video_ids: list[str],
+    *,
+    now_iso: str,
+) -> dict[str, dict[str, Any]]:
+    """Return unexpired YouTube videos keyed by video_id applying strict read-time TTL filtering."""
+    if not video_ids:
+        return {}
+    placeholders = ",".join("?" for _ in video_ids)
+    rows = conn.execute(
+        f"""
+        SELECT v.*, ufl.manual_format
+        FROM youtube_videos v
+        LEFT JOIN user_video_format_labels ufl ON ufl.video_id = v.video_id
+        WHERE v.video_id IN ({placeholders})
+          AND v.api_expires_at IS NOT NULL
+          AND v.api_expires_at > ?
+          AND v.api_purged_at IS NULL
+        """,
+        (*video_ids, now_iso),
+    ).fetchall()
+    snaps = _load_snapshots_map(conn, [r["video_id"] for r in rows], now_iso)
+    return {r["video_id"]: _row_to_video_dto(r, snaps.get(r["video_id"], []), now_iso) for r in rows}
+
+
+def get_valid_channels_by_ids(
+    conn: sqlite3.Connection,
+    channel_ids: list[str],
+    *,
+    now_iso: str,
+) -> dict[str, dict[str, Any]]:
+    """Return unexpired YouTube channels keyed by channel_id applying strict read-time TTL filtering."""
+    if not channel_ids:
+        return {}
+    placeholders = ",".join("?" for _ in channel_ids)
+    rows = conn.execute(
+        f"""
+        SELECT *
+        FROM youtube_channels
+        WHERE channel_id IN ({placeholders})
+          AND api_expires_at IS NOT NULL
+          AND api_expires_at > ?
+          AND api_purged_at IS NULL
+        """,
+        (*channel_ids, now_iso),
+    ).fetchall()
+    result: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        result[row["channel_id"]] = {
+            "channelId": row["channel_id"],
+            "hasValidApiData": True,
+            "apiPurged": False,
+            "title": row["title"],
+            "handle": row["handle"],
+            "description": row["description"],
+            "country": row["country"],
+            "thumbnailUrl": row["thumbnail_url"],
+            "uploadsPlaylistId": row["uploads_playlist_id"],
+            "subscriberCount": row["subscriber_count"],
+            "videoCount": row["video_count"],
+            "publishedAt": row["published_at"],
+            "apiFetchedAt": row["api_fetched_at"],
+            "apiExpiresAt": row["api_expires_at"],
+        }
+    return result
+
+
+def list_channel_valid_videos(
+    channel_id: str,
+    *,
+    now_utc: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """List unexpired cached videos belonging to channel_id ordered newest first."""
+    now_iso = _normalize_utc(now_utc).isoformat()
+    with read_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT v.*, ufl.manual_format
+            FROM youtube_videos v
+            LEFT JOIN user_video_format_labels ufl ON ufl.video_id = v.video_id
+            WHERE v.channel_id = ?
+              AND v.api_expires_at IS NOT NULL
+              AND v.api_expires_at > ?
+              AND v.api_purged_at IS NULL
+            ORDER BY v.published_at DESC, v.view_count DESC
+            """,
+            (channel_id, now_iso),
+        ).fetchall()
+        snaps = _load_snapshots_map(conn, [r["video_id"] for r in rows], now_iso)
+    return [_row_to_video_dto(r, snaps.get(r["video_id"], []), now_iso) for r in rows]
