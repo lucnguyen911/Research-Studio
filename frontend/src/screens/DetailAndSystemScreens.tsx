@@ -14,7 +14,7 @@ import type {
   VideoDetailResponseDto,
 } from '../api/types';
 import { IDEA_STATUS_LABELS, formatInt } from '../prototype/demoData';
-import type { IdeaStatus } from '../prototype/types';
+import type { IdeaItem, IdeaPriority, IdeaStatus } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
 import { usePrototypeWorkspace } from '../state/workspaceContext';
 import { FormatBadgeGroup } from '../components/FormatBadgeGroup';
@@ -674,12 +674,43 @@ export const ArticleDetailScreen: React.FC = () => {
 };
 
 export const IdeaDetailScreen: React.FC = () => {
-  const { currentEntry, goBack } = useAppNavigation();
-  const { ideas, projects, updateProjectIdeaStatus, updateProjectIdeaAngle, attachIdeaToProject } =
-    usePrototypeWorkspace();
-  const idea = ideas.find((i) => i.id === currentEntry.params.ideaId) ?? ideas[0];
+  const { currentEntry, goBack, navigate } = useAppNavigation();
+  const {
+    isBootstrapping,
+    ideas,
+    projects,
+    updateIdeaCore,
+    updateProjectIdeaStatus,
+    updateProjectIdeaAngle,
+    attachIdeaToProject,
+    detachIdeaFromProject,
+    deleteIdea,
+  } = usePrototypeWorkspace();
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
-  if (!idea) return null;
+  const requestedId = currentEntry.params.ideaId;
+  const idea = requestedId ? ideas.find((i) => i.id === requestedId) : undefined;
+
+  if (isBootstrapping && !idea) {
+    return (
+      <div className="rs-container">
+        <LoadingSkeletonCard label="Đang tải Chi tiết Ý tưởng từ SQLite..." />
+      </div>
+    );
+  }
+
+  if (!idea) {
+    return (
+      <div className="rs-container">
+        <EmptyStateCard
+          title="Không tìm thấy Ý tưởng"
+          description="Ý tưởng không tồn tại hoặc đã bị xóa."
+          actionLabel="Mở Kho ý tưởng chung"
+          onAction={() => navigate('global-ideas')}
+        />
+      </div>
+    );
+  }
 
   const unattached = projects.filter((p) => !idea.projectLinks[p.id]);
 
@@ -690,28 +721,21 @@ export const IdeaDetailScreen: React.FC = () => {
           <h1 className="rs-page-title">Chi tiết Ý tưởng</h1>
           <p className="rs-page-subtitle">1 bản ý tưởng gốc — triển khai độc lập sang nhiều Project với 5 trạng thái riêng</p>
         </div>
-        <button type="button" className="rs-btn rs-btn-secondary" onClick={goBack}>
-          ← Quay lại
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="rs-btn rs-btn-secondary" onClick={goBack}>
+            ← Quay lại
+          </button>
+          <button type="button" className="rs-btn rs-btn-danger" onClick={() => setConfirmDeleteOpen(true)}>
+            Xóa Ý tưởng gốc
+          </button>
+        </div>
       </div>
 
-      <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <h2 style={{ margin: 0, fontSize: '18px' }}>{idea.title}</h2>
-        <p style={{ margin: 0, color: 'var(--rs-text-secondary)' }}>{idea.notes}</p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <span className="rs-badge">Nguồn: {idea.sourceTitleSnapshot}</span>
-          {idea.sourceUrl && (
-            <a href={idea.sourceUrl} target="_blank" rel="noreferrer" className="rs-badge">
-              Liên kết nguồn gốc ↗
-            </a>
-          )}
-          {idea.apiPurged && (
-            <span className="rs-badge rs-badge-warning">
-              Dữ liệu API hết hạn 30 ngày đã xóa sạch — Ý tưởng &amp; URL tham chiếu giữ nguyên
-            </span>
-          )}
-        </div>
-      </section>
+      <IdeaCoreEditor
+        key={idea.id}
+        idea={idea}
+        onSave={(patch) => updateIdeaCore(idea.id, patch)}
+      />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ margin: 0, fontSize: '16px' }}>
@@ -723,7 +747,9 @@ export const IdeaDetailScreen: React.FC = () => {
             className="rs-select rs-select-compact"
             value=""
             onChange={(e) => {
-              if (e.target.value) attachIdeaToProject(idea.id, e.target.value, idea.title);
+              if (e.target.value) {
+                void attachIdeaToProject(idea.id, e.target.value, idea.title);
+              }
             }}
           >
             <option value="">+ Gắn sang thêm Project...</option>
@@ -736,56 +762,187 @@ export const IdeaDetailScreen: React.FC = () => {
         )}
       </div>
 
-      <div className="rs-grid-2">
-        {Object.entries(idea.projectLinks).map(([pid, link]) => {
-          const proj = projects.find((p) => p.id === pid);
-          return (
-            <ProjectLinkEditorCard
-              key={`${idea.id}-${pid}`}
-              projectName={proj?.name ?? pid}
-              initialStatus={link.status}
-              initialAngle={link.projectAngle}
-              initialNotes={link.projectNotes}
-              initialUrl={link.publishedVideoUrl}
-              onStatusChange={(st) => updateProjectIdeaStatus(idea.id, pid, st)}
-              onSaveDetails={(a, n, u) => updateProjectIdeaAngle(idea.id, pid, a, n, u)}
-            />
-          );
-        })}
-      </div>
+      {Object.keys(idea.projectLinks).length === 0 ? (
+        <EmptyStateCard
+          title="Ý tưởng này chưa gắn vào Project nào"
+          description="Chọn một Project ở danh sách phía trên để bắt đầu phân bổ góc khai thác và trạng thái sản xuất."
+        />
+      ) : (
+        <div className="rs-grid-2">
+          {Object.entries(idea.projectLinks).map(([pid, link]) => {
+            const proj = projects.find((p) => p.id === pid);
+            return (
+              <ProjectLinkEditorCard
+                key={`${idea.id}-${pid}`}
+                projectName={proj?.name ?? pid}
+                initialStatus={link.status}
+                initialPriority={link.priority}
+                initialAngle={link.projectAngle}
+                initialNotes={link.projectNotes}
+                initialUrl={link.publishedVideoUrl}
+                onStatusChange={(st) => updateProjectIdeaStatus(idea.id, pid, st)}
+                onSaveDetails={(a, n, u, p) => updateProjectIdeaAngle(idea.id, pid, a, n, u, p)}
+                onDetach={() => detachIdeaFromProject(idea.id, pid)}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      <ConfirmDeleteModal
+        open={confirmDeleteOpen}
+        title="Xác nhận xóa Ý tưởng gốc?"
+        warningText={`Ý tưởng "${idea.title}" đang liên kết với ${Object.keys(idea.projectLinks).length} Project. Xóa ý tưởng gốc sẽ xóa luôn các liên kết theo Project.`}
+        confirmLabel="Xác nhận xóa vĩnh viễn"
+        onCancel={() => setConfirmDeleteOpen(false)}
+        onConfirm={() => {
+          setConfirmDeleteOpen(false);
+          void deleteIdea(idea.id).then((ok) => {
+            if (ok) navigate('global-ideas');
+          });
+        }}
+      />
     </div>
+  );
+};
+
+const IdeaCoreEditor: React.FC<{
+  idea: IdeaItem;
+  onSave: (patch: { title: string; notes: string; inGlobalVault: boolean; tags: string[] }) => Promise<boolean>;
+}> = ({ idea, onSave }) => {
+  const [title, setTitle] = useState(idea.title);
+  const [notes, setNotes] = useState(idea.notes);
+  const [inGlobalVault, setInGlobalVault] = useState(idea.inGlobalVault);
+  const [tagsText, setTagsText] = useState(idea.tags.join(', '));
+  const [saving, setSaving] = useState(false);
+
+  const safeSourceUrl =
+    idea.sourceUrl.startsWith('https://') || idea.sourceUrl.startsWith('http://') ? idea.sourceUrl : '';
+
+  return (
+    <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="rs-badge">Nguồn: {idea.sourceTitleSnapshot || 'Tạo thủ công'}</span>
+          {safeSourceUrl && (
+            <a href={safeSourceUrl} target="_blank" rel="noreferrer" className="rs-badge">
+              Liên kết nguồn gốc ↗
+            </a>
+          )}
+          {idea.apiPurged && (
+            <span className="rs-badge rs-badge-warning">
+              Dữ liệu API hết hạn 30 ngày đã xóa sạch — Ý tưởng &amp; URL tham chiếu giữ nguyên
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>
+          Cập nhật: {formatDateTimeVi(idea.updatedAt)}
+        </span>
+      </div>
+
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Tiêu đề Ý tưởng gốc *</span>
+        <input type="text" className="rs-input" value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
+
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Ghi chú gốc (User-Created Data)</span>
+        <textarea className="rs-textarea" value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </label>
+
+      <div className="rs-grid-2">
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Thẻ phân loại (cách nhau dấu phẩy)</span>
+          <input type="text" className="rs-input" value={tagsText} onChange={(e) => setTagsText(e.target.value)} />
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', alignSelf: 'end', paddingBottom: 8 }}>
+          <input type="checkbox" checked={inGlobalVault} onChange={(e) => setInGlobalVault(e.target.checked)} />
+          <span>Hiển thị trong Kho ý tưởng chung (G5)</span>
+        </label>
+      </div>
+
+      <div>
+        <button
+          type="button"
+          className="rs-btn rs-btn-primary rs-btn-sm"
+          disabled={!title.trim() || saving}
+          onClick={() => {
+            setSaving(true);
+            const tags = tagsText
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean);
+            void onSave({ title: title.trim(), notes: notes.trim(), inGlobalVault, tags }).finally(() => {
+              setSaving(false);
+            });
+          }}
+        >
+          {saving ? 'Đang lưu...' : 'Lưu Ý tưởng gốc'}
+        </button>
+      </div>
+    </section>
   );
 };
 
 const ProjectLinkEditorCard: React.FC<{
   projectName: string;
   initialStatus: IdeaStatus;
+  initialPriority: IdeaPriority;
   initialAngle: string;
   initialNotes: string;
   initialUrl: string;
-  onStatusChange: (s: IdeaStatus) => void;
-  onSaveDetails: (angle: string, notes: string, url: string) => void;
-}> = ({ projectName, initialStatus, initialAngle, initialNotes, initialUrl, onStatusChange, onSaveDetails }) => {
+  onStatusChange: (s: IdeaStatus) => Promise<boolean>;
+  onSaveDetails: (angle: string, notes: string, url: string, priority: IdeaPriority) => Promise<boolean>;
+  onDetach: () => Promise<boolean>;
+}> = ({
+  projectName,
+  initialStatus,
+  initialPriority,
+  initialAngle,
+  initialNotes,
+  initialUrl,
+  onStatusChange,
+  onSaveDetails,
+  onDetach,
+}) => {
   const [angle, setAngle] = useState(initialAngle);
   const [notes, setNotes] = useState(initialNotes);
   const [url, setUrl] = useState(initialUrl);
+  const [priority, setPriority] = useState<IdeaPriority>(initialPriority);
+  const [saving, setSaving] = useState(false);
+
+  const safePublishedUrl = url.startsWith('https://') || url.startsWith('http://') ? url : '';
 
   return (
     <div className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <strong>{projectName}</strong>
-        <select
-          aria-label={`Trạng thái trong ${projectName}`}
-          className="rs-select rs-select-compact"
-          value={initialStatus}
-          onChange={(e) => onStatusChange(e.target.value as IdeaStatus)}
-        >
-          {(Object.keys(IDEA_STATUS_LABELS) as IdeaStatus[]).map((st) => (
-            <option key={st} value={st}>
-              {IDEA_STATUS_LABELS[st]}
-            </option>
-          ))}
-        </select>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <select
+            aria-label={`Ưu tiên trong ${projectName}`}
+            className="rs-select rs-select-compact"
+            value={priority}
+            onChange={(e) => setPriority(e.target.value as IdeaPriority)}
+          >
+            <option value="high">Ưu tiên: Cao</option>
+            <option value="medium">Ưu tiên: Trung bình</option>
+            <option value="low">Ưu tiên: Thấp</option>
+          </select>
+          <select
+            aria-label={`Trạng thái trong ${projectName}`}
+            className="rs-select rs-select-compact"
+            value={initialStatus}
+            onChange={(e) => {
+              void onStatusChange(e.target.value as IdeaStatus);
+            }}
+          >
+            {(Object.keys(IDEA_STATUS_LABELS) as IdeaStatus[]).map((st) => (
+              <option key={st} value={st}>
+                {IDEA_STATUS_LABELS[st]}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Góc khai thác riêng của Project</span>
@@ -805,9 +962,35 @@ const ProjectLinkEditorCard: React.FC<{
           onChange={(e) => setUrl(e.target.value)}
         />
       </label>
-      <div>
-        <button type="button" className="rs-btn rs-btn-secondary rs-btn-sm" onClick={() => onSaveDetails(angle, notes, url)}>
-          Lưu thay đổi cho Project này
+      {safePublishedUrl && (
+        <div style={{ fontSize: '12.5px' }}>
+          <a href={safePublishedUrl} target="_blank" rel="noreferrer">
+            Mở video đã xuất bản ↗
+          </a>
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="rs-btn rs-btn-secondary rs-btn-sm"
+          disabled={saving}
+          onClick={() => {
+            setSaving(true);
+            void onSaveDetails(angle, notes, url, priority).finally(() => setSaving(false));
+          }}
+        >
+          {saving ? 'Đang lưu...' : 'Lưu thay đổi cho Project này'}
+        </button>
+        <button
+          type="button"
+          className="rs-btn rs-btn-ghost rs-btn-sm"
+          disabled={saving}
+          onClick={() => {
+            setSaving(true);
+            void onDetach().finally(() => setSaving(false));
+          }}
+        >
+          Gỡ khỏi Project
         </button>
       </div>
     </div>

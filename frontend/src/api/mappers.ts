@@ -1,5 +1,5 @@
-import type { RssFeedDto, YoutubeVideoDto } from './types';
-import type { ManualFormatLabel, RssFeedItem, VideoItem } from '../prototype/types';
+import type { IdeaDto, RssFeedDto, YoutubeVideoDto } from './types';
+import type { IdeaItem, ManualFormatLabel, ProjectIdeaLink, RssFeedItem, VideoItem } from '../prototype/types';
 
 export function formatDurationSeconds(seconds: number | null, isLive = false): string {
   if (isLive) return 'LIVE';
@@ -90,5 +90,33 @@ export function mapRssFeedDtoToItem(dto: RssFeedDto): RssFeedItem {
     lastFetchedAt: formatDateTimeVi(dto.lastFetchedAt),
     errorCode: dto.lastErrorCode ?? undefined,
     errorMessage: dto.lastErrorMessage ?? undefined,
+  };
+}
+
+export function mapIdeaDtoToItem(dto: IdeaDto): IdeaItem {
+  const projectLinks: Record<string, ProjectIdeaLink> = {};
+  for (const [pid, link] of Object.entries(dto.projectLinks)) {
+    projectLinks[pid] = {
+      status: link.status,
+      priority: link.priority,
+      projectAngle: link.projectAngle,
+      projectNotes: link.projectNotes,
+      publishedVideoUrl: link.publishedVideoUrl,
+      statusUpdatedAt: formatDateTimeVi(link.statusUpdatedAt),
+    };
+  }
+  return {
+    id: dto.id,
+    title: dto.title,
+    notes: dto.notes,
+    sourceType: dto.sourceType,
+    sourceRefId: dto.sourceRefId,
+    sourceTitleSnapshot: dto.sourceTitleSnapshot,
+    sourceUrl: dto.sourceUrl,
+    apiPurged: dto.apiPurged,
+    inGlobalVault: dto.inGlobalVault,
+    tags: dto.tags,
+    updatedAt: formatDateTimeVi(dto.updatedAt),
+    projectLinks,
   };
 }

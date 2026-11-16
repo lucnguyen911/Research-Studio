@@ -280,7 +280,7 @@
 
 ## Milestone 4 — Idea Workspace *(Đưa lên sớm để chốt luồng nghiên cứu → lưu → quản lý đa Project)*
 
-### [ ] T13 — Backend Kho Ý tưởng Chung (`G5`), Liên kết Đa Project & 5 Trạng thái Sản xuất Độc lập (`P5`)
+### [x] T13 — Backend Kho Ý tưởng Chung (`G5`), Liên kết Đa Project & 5 Trạng thái Sản xuất Độc lập (`P5`)
 - **ID:** T13
 - **TITLE:** Backend Kho Ý tưởng Chung (`G5`), Liên kết Đa Project & 5 Trạng thái Sản xuất Độc lập (`P5`)
 - **GOAL:** Triển khai `idea_repo.py`, `idea_service.py` và router `ideas.py` cho Kho Ý tưởng chung (`G5`) và Quản lý ý tưởng theo Project (`P5`): tạo ý tưởng viết tay hoặc từ Video/RSS/Từ khóa, gắn 1 bản ý tưởng gốc vào 1 hoặc nhiều Project với góc khai thác, ghi chú, ưu tiên, `published_video_url` và 5 trạng thái (`new`, `researching`, `approved`, `produced`, `skipped`) hoàn toàn độc lập; dùng `LEFT JOIN` nullable bảo đảm ý tưởng vẫn đọc bình thường ngay cả khi `API Data` của video nguồn đã quá 30 ngày và bị xóa phần API.
@@ -299,7 +299,7 @@
 - **RISK:** MEDIUM
 - **USER APPROVAL REQUIRED:** NO
 
-### [ ] T14 — Giao diện `G5. Kho ý tưởng chung`, `P5. Quản lý ý tưởng`, *Chi tiết Ý tưởng* & `<SaveIdeaModal />` trên `G2`/`G3`/`G4`
+### [x] T14 — Giao diện `G5. Kho ý tưởng chung`, `P5. Quản lý ý tưởng`, *Chi tiết Ý tưởng* & `<SaveIdeaModal />` trên `G2`/`G3`/`G4`
 - **ID:** T14
 - **TITLE:** Giao diện `G5. Kho ý tưởng chung`, `P5. Quản lý ý tưởng` (Bảng/Danh sách Gọn nhẹ), *Chi tiết Ý tưởng* & `<SaveIdeaModal />` trên `G2`, `G3`, `G4`
 - **GOAL:** Xây dựng màn hình `G5. Kho ý tưởng chung`, `P5. Quản lý ý tưởng` (giao diện Danh sách / Bảng gọn nhẹ kèm lọc 5 trạng thái, ưu tiên, nguồn gốc và đổi trạng thái trực tiếp — không Kanban kéo thả), trang *Chi tiết Ý tưởng*, và hộp thoại dùng chung `<SaveIdeaModal />` tích hợp ngay vào `G2. Xu hướng`, `G3. Tự do`, `G4. RSS` cùng các trang Chi tiết hiện có.
@@ -321,8 +321,8 @@
 - **USER APPROVAL REQUIRED:** NO
 
 ### Checkpoint M4 — Idea Workspace (Complete Core End-to-End Product Loop)
-- [ ] Toàn bộ test `T13`–`T14` pass 100%; frontend `typecheck`/`lint`/`build` sạch.
-- [ ] **Kiểm chứng luồng cốt lõi hoàn chỉnh sớm:** Tạo Project → Khám phá YouTube/RSS → Lưu Ý tưởng → Quản lý 5 trạng thái đa Project → Ngắt mạng đọc lại dữ liệu đã lưu.
+- [x] Toàn bộ test `T13`–`T14` pass 100%; frontend `typecheck`/`lint`/`build` sạch.
+- [x] **Kiểm chứng luồng cốt lõi hoàn chỉnh sớm:** Tạo Project → Khám phá YouTube/RSS → Lưu Ý tưởng → Quản lý 5 trạng thái đa Project → Ngắt mạng đọc lại dữ liệu đã lưu.
 
 ---
 

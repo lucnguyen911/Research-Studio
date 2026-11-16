@@ -12,6 +12,7 @@ from app.core.logging_setup import close_logging_handlers, configure_logging
 from app.core.security import CSRF_HEADER_NAME, verify_local_csrf_and_origin
 from app.db.migrator import run_migrations
 from app.routers import global_research as global_research_router
+from app.routers import ideas as ideas_router
 from app.routers import projects as projects_router
 from app.routers import rss as rss_router
 from app.routers import system as system_router
@@ -68,6 +69,7 @@ def create_app() -> FastAPI:
     application.include_router(projects_router.router)
     application.include_router(global_research_router.router)
     application.include_router(rss_router.router)
+    application.include_router(ideas_router.router)
 
     @application.get("/api/health")
     async def health_check() -> dict[str, str]:

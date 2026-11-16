@@ -132,6 +132,19 @@ def _tombstone_expired_youtube_data_in_tx(
         {"now_iso": now_iso},
     )
 
+    conn.execute(
+        """
+        UPDATE ideas
+        SET source_title_snapshot = ''
+        WHERE source_type = 'youtube_video'
+          AND linked_video_id IS NOT NULL
+          AND linked_video_id IN (
+              SELECT video_id FROM youtube_videos WHERE api_purged_at = :now_iso
+          )
+        """,
+        {"now_iso": now_iso},
+    )
+
     return {
         "snapshotsDeleted": max(0, cur_snap.rowcount),
         "searchSessionsDeleted": max(0, cur_sess.rowcount),

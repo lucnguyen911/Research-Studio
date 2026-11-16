@@ -23,14 +23,11 @@ import type {
   VideoItem,
 } from '../prototype/types';
 
-// Remaining screens awaiting Milestone 4 (Idea Workspace) and Milestone 5 (P2/P3/P4)
+// Remaining screens awaiting Milestone 5 (P2/P3/P4)
 const DEMO_PREVIEW_SCREENS = new Set<ScreenId>([
-  'global-ideas',
   'project-competitors',
   'project-breakout',
   'project-keywords',
-  'project-ideas',
-  'idea-detail',
 ]);
 
 export function isDemoPreviewScreen(screenId: ScreenId): boolean {
@@ -119,6 +116,7 @@ export interface PrototypeWorkspaceContextValue {
   scanKeywordDemo: (keywordId: string) => void;
 
   ideas: IdeaItem[];
+  reloadIdeas: (signal?: AbortSignal) => Promise<void>;
   saveIdea: (input: {
     title: string;
     notes: string;
@@ -130,17 +128,34 @@ export interface PrototypeWorkspaceContextValue {
     inGlobalVault: boolean;
     targetProjectIds: string[];
     projectAngle: string;
-  }) => void;
-  updateProjectIdeaStatus: (ideaId: string, projectId: string, status: IdeaStatus) => void;
+    priority?: IdeaPriority;
+  }) => Promise<boolean>;
+  updateIdeaCore: (
+    ideaId: string,
+    patch: {
+      title?: string;
+      notes?: string;
+      tags?: string[];
+      inGlobalVault?: boolean;
+    },
+  ) => Promise<boolean>;
+  updateProjectIdeaStatus: (ideaId: string, projectId: string, status: IdeaStatus) => Promise<boolean>;
   updateProjectIdeaAngle: (
     ideaId: string,
     projectId: string,
     angle: string,
     notes: string,
     publishedVideoUrl: string,
-  ) => void;
-  attachIdeaToProject: (ideaId: string, projectId: string, projectAngle: string) => void;
-  deleteIdea: (ideaId: string) => void;
+    priority?: IdeaPriority,
+  ) => Promise<boolean>;
+  attachIdeaToProject: (
+    ideaId: string,
+    projectId: string,
+    projectAngle: string,
+    priority?: IdeaPriority,
+  ) => Promise<boolean>;
+  detachIdeaFromProject: (ideaId: string, projectId: string) => Promise<boolean>;
+  deleteIdea: (ideaId: string) => Promise<boolean>;
 
   autoRefreshEnabled: boolean;
   setAutoRefreshEnabled: (next: boolean) => void;

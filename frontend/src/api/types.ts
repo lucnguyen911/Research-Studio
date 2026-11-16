@@ -282,3 +282,61 @@ export interface RssRefreshAllResultDto {
   results: RssSingleRefreshResultDto[];
 }
 
+export interface IdeaProjectLinkDto {
+  status: 'new' | 'researching' | 'approved' | 'produced' | 'skipped';
+  priority: 'high' | 'medium' | 'low';
+  projectAngle: string;
+  projectNotes: string;
+  publishedVideoUrl: string;
+  statusUpdatedAt: string;
+}
+
+export interface IdeaDto {
+  id: string;
+  title: string;
+  notes: string;
+  sourceType: 'manual' | 'youtube_video' | 'rss_article' | 'keyword';
+  sourceRefId: string;
+  sourceTitleSnapshot: string;
+  sourceUrl: string;
+  linkedVideoId: string | null;
+  linkedChannelId: string | null;
+  linkedArticleId: string | null;
+  apiPurged: boolean;
+  inGlobalVault: boolean;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  projectLinks: Record<string, IdeaProjectLinkDto>;
+}
+
+export interface CreateIdeaPayload {
+  title: string;
+  notes: string;
+  sourceType: 'manual' | 'youtube_video' | 'rss_article' | 'keyword';
+  sourceRefId: string;
+  sourceTitleSnapshot: string;
+  sourceUrl: string;
+  tags: string[];
+  inGlobalVault: boolean;
+  targetProjectIds: string[];
+  projectAngle: string;
+  priority: 'high' | 'medium' | 'low';
+}
+
+export interface UpdateIdeaCorePayload {
+  title?: string;
+  notes?: string;
+  inGlobalVault?: boolean;
+  tags?: string[];
+}
+
+export interface UpsertProjectIdeaLinkPayload {
+  status?: 'new' | 'researching' | 'approved' | 'produced' | 'skipped';
+  priority?: 'high' | 'medium' | 'low';
+  projectAngle?: string;
+  projectNotes?: string;
+  publishedVideoUrl?: string;
+}
+
+

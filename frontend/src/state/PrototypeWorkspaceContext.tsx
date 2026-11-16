@@ -1,12 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ApiClientError,
+  createIdeaApi,
   createProjectApi,
   createRssFeedApi,
+  deleteIdeaApi,
   deleteProjectApi,
   deleteRssFeedApi,
   deleteYoutubeApiKeyApi,
+  detachIdeaFromProjectApi,
   exportProjectJsonApi,
+  fetchIdeasApi,
   fetchProjectsApi,
   fetchQuotaStatus,
   fetchRssFeedsApi,
@@ -18,12 +22,14 @@ import {
   saveYoutubeApiKeyApi,
   setLegalConsentApi,
   setManualVideoFormatApi,
+  updateIdeaCoreApi,
   updateProjectApi,
   updateProjectRssFeedsApi,
   updateRssFeedApi,
   updateSystemSettingsApi,
+  upsertProjectIdeaLinkApi,
 } from '../api/client';
-import { mapRssFeedDtoToItem } from '../api/mappers';
+import { mapIdeaDtoToItem, mapRssFeedDtoToItem } from '../api/mappers';
 import type {
   ProjectDto,
   PurgeCacheResultDto,
@@ -33,7 +39,7 @@ import type {
   SystemSettingsDto,
   UpdateSystemSettingsPayload,
 } from '../api/types';
-import { DEMO_CHANNELS, DEMO_IDEAS, DEMO_KEYWORDS } from '../prototype/demoData';
+import { DEMO_CHANNELS, DEMO_KEYWORDS } from '../prototype/demoData';
 import type {
   ChannelItem,
   IdeaItem,
@@ -160,11 +166,11 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
   const [cachedVideosById, setCachedVideosById] = useState<Record<string, VideoItem>>({});
   const [manualFormatMap, setManualFormatMap] = useState<Record<string, ManualFormatLabel>>({});
 
-  // Remaining M4/M5 preview states (replaced cleanly in T13-T17)
+  // Remaining M5 preview states (replaced cleanly in T15-T17)
   const [previewUiMode, setPreviewUiMode] = useState<UiSimulatorMode>('normal');
   const [channels, setChannels] = useState<ChannelItem[]>(DEMO_CHANNELS);
   const [keywords, setKeywords] = useState<KeywordItem[]>(DEMO_KEYWORDS);
-  const [ideas, setIdeas] = useState<IdeaItem[]>(DEMO_IDEAS);
+  const [ideas, setIdeas] = useState<IdeaItem[]>([]);
   const [breakoutByProject, setBreakoutByProject] = useState<
     Record<string, Record<string, { flagged: boolean; note: string }>>
   >({});
@@ -196,13 +202,15 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
       fetchQuotaStatus(controller.signal),
       fetchProjectsApi(controller.signal),
       fetchRssFeedsApi(controller.signal),
+      fetchIdeasApi(undefined, controller.signal),
     ])
-      .then(([settingsRes, quotaRes, projectListRes, feedsRes]) => {
+      .then(([settingsRes, quotaRes, projectListRes, feedsRes, ideasRes]) => {
         if (controller.signal.aborted) return;
         setSystemSettings(settingsRes);
         setQuotaStatus(quotaRes);
         setProjects(projectListRes.map(dtoToProjectItem));
         setRssFeedDtos(feedsRes);
+        setIdeas(ideasRes.map(mapIdeaDtoToItem));
         setThemeState(settingsRes.themeMode);
         applyThemeToDom(settingsRes.themeMode);
         setBackendOnline(true);
@@ -231,16 +239,18 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const syncFromBackend = useCallback(async (signal?: AbortSignal): Promise<boolean> => {
     try {
-      const [settingsRes, quotaRes, projectListRes, feedsRes] = await Promise.all([
+      const [settingsRes, quotaRes, projectListRes, feedsRes, ideasRes] = await Promise.all([
         fetchSystemSettings(signal),
         fetchQuotaStatus(signal),
         fetchProjectsApi(signal),
         fetchRssFeedsApi(signal),
+        fetchIdeasApi(undefined, signal),
       ]);
       setSystemSettings(settingsRes);
       setQuotaStatus(quotaRes);
       setProjects(projectListRes.map(dtoToProjectItem));
       setRssFeedDtos(feedsRes);
+      setIdeas(ideasRes.map(mapIdeaDtoToItem));
       setThemeState(settingsRes.themeMode);
       applyThemeToDom(settingsRes.themeMode);
       setBackendOnline(true);
@@ -364,12 +374,25 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
     }
   }, [pushToast]);
 
+  const reloadIdeas = useCallback(async (signal?: AbortSignal): Promise<void> => {
+    try {
+      const ideasRes = await fetchIdeasApi(undefined, signal);
+      setIdeas(ideasRes.map(mapIdeaDtoToItem));
+      setBackendOnline(true);
+    } catch (err) {
+      if (!isAbortError(err)) {
+        pushToast('error', formatErrorToast(err, 'Không thể tải danh sách Ý tưởng từ SQLite.'));
+      }
+    }
+  }, [pushToast]);
+
   const purgeYoutubeCache = useCallback(async (): Promise<PurgeCacheResultDto | null> => {
     try {
       const result = await purgeYoutubeCacheApi();
       setApiCachePurged(true);
       setCachedVideosById({});
       setBackendOnline(true);
+      await reloadIdeas();
       pushToast(
         'success',
         `Đã xóa sạch cache YouTube API (xóa ${result.videosDeleted + result.videosTombstoned} video cache, ${result.dbBackupsDeleted} bản sao lưu .db). Dữ liệu của bạn được giữ 100%.`,
@@ -381,7 +404,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
       }
       return null;
     }
-  }, [pushToast]);
+  }, [pushToast, reloadIdeas]);
 
   const createProject = useCallback(
     async (input: {
@@ -479,6 +502,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         const result = await deleteProjectApi(projectId, confirmName);
         setProjects((prev) => prev.filter((p) => p.id !== projectId));
         setBackendOnline(true);
+        await reloadIdeas();
         pushToast(
           'success',
           `Đã xóa Project "${result.deletedProjectName}" (đã sao lưu ${result.recoveryBackupFilename} và giữ 100% dữ liệu dùng chung).`,
@@ -491,7 +515,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         return false;
       }
     },
-    [pushToast],
+    [pushToast, reloadIdeas],
   );
 
   const registerVideosInMemory = useCallback((videos: VideoItem[]) => {
@@ -742,101 +766,170 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
     );
   };
 
-  const saveIdea: PrototypeWorkspaceContextValue['saveIdea'] = (input) => {
-    const links: IdeaItem['projectLinks'] = {};
-    for (const pid of input.targetProjectIds) {
-      links[pid] = {
-        status: 'new',
-        priority: 'medium',
-        projectAngle: input.projectAngle || input.title,
-        projectNotes: '',
-        publishedVideoUrl: '',
-        statusUpdatedAt: 'DEMO',
-      };
-    }
-    const item: IdeaItem = {
-      id: `idea-${Date.now().toString(36)}`,
-      title: input.title.trim(),
-      notes: input.notes.trim(),
-      sourceType: input.sourceType,
-      sourceRefId: input.sourceRefId,
-      sourceTitleSnapshot: input.sourceTitleSnapshot,
-      sourceUrl: input.sourceUrl,
-      inGlobalVault: input.inGlobalVault,
-      tags: input.tags,
-      updatedAt: 'DEMO',
-      projectLinks: links,
-    };
-    setIdeas((prev) => [item, ...prev]);
-    pushToast('success', 'Đã thêm vào bộ xem trước Ý tưởng (sẽ nối SQLite thật ở M4).');
-  };
+  const saveIdea: PrototypeWorkspaceContextValue['saveIdea'] = useCallback(
+    async (input): Promise<boolean> => {
+      try {
+        const created = await createIdeaApi({
+          title: input.title.trim(),
+          notes: input.notes.trim(),
+          sourceType: input.sourceType,
+          sourceRefId: input.sourceRefId,
+          sourceTitleSnapshot: input.sourceTitleSnapshot,
+          sourceUrl: input.sourceUrl,
+          tags: input.tags,
+          inGlobalVault: input.inGlobalVault,
+          targetProjectIds: input.targetProjectIds,
+          projectAngle: input.projectAngle.trim(),
+          priority: input.priority ?? 'medium',
+        });
+        const mapped = mapIdeaDtoToItem(created);
+        setIdeas((prev) => [mapped, ...prev.filter((i) => i.id !== mapped.id)]);
+        setBackendOnline(true);
+        pushToast('success', 'Đã lưu Ý tưởng vĩnh viễn vào SQLite.');
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể lưu Ý tưởng.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
 
-  const updateProjectIdeaStatus = (ideaId: string, projectId: string, status: IdeaStatus) => {
-    setIdeas((prev) =>
-      prev.map((idea) => {
-        if (idea.id !== ideaId || !idea.projectLinks[projectId]) return idea;
-        return {
-          ...idea,
-          projectLinks: {
-            ...idea.projectLinks,
-            [projectId]: { ...idea.projectLinks[projectId], status },
-          },
-        };
-      }),
-    );
-  };
+  const updateIdeaCore: PrototypeWorkspaceContextValue['updateIdeaCore'] = useCallback(
+    async (ideaId, patch): Promise<boolean> => {
+      try {
+        const updated = await updateIdeaCoreApi(ideaId, patch);
+        const mapped = mapIdeaDtoToItem(updated);
+        setIdeas((prev) => prev.map((i) => (i.id === ideaId ? mapped : i)));
+        setBackendOnline(true);
+        pushToast('success', 'Đã cập nhật nội dung gốc Ý tưởng trong SQLite.');
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể cập nhật nội dung Ý tưởng.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
 
-  const updateProjectIdeaAngle = (
-    ideaId: string,
-    projectId: string,
-    angle: string,
-    notes: string,
-    publishedVideoUrl: string,
-  ) => {
-    setIdeas((prev) =>
-      prev.map((idea) => {
-        if (idea.id !== ideaId || !idea.projectLinks[projectId]) return idea;
-        return {
-          ...idea,
-          projectLinks: {
-            ...idea.projectLinks,
-            [projectId]: {
-              ...idea.projectLinks[projectId],
-              projectAngle: angle,
-              projectNotes: notes,
-              publishedVideoUrl,
-            },
-          },
-        };
-      }),
-    );
-  };
+  const updateProjectIdeaStatus = useCallback(
+    async (ideaId: string, projectId: string, status: IdeaStatus): Promise<boolean> => {
+      try {
+        const updated = await upsertProjectIdeaLinkApi(ideaId, projectId, { status });
+        const mapped = mapIdeaDtoToItem(updated);
+        setIdeas((prev) => prev.map((i) => (i.id === ideaId ? mapped : i)));
+        setBackendOnline(true);
+        pushToast('success', 'Đã cập nhật trạng thái sản xuất của Ý tưởng.');
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể cập nhật trạng thái Ý tưởng.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
 
-  const attachIdeaToProject = (ideaId: string, projectId: string, projectAngle: string) => {
-    setIdeas((prev) =>
-      prev.map((idea) => {
-        if (idea.id !== ideaId) return idea;
-        return {
-          ...idea,
-          projectLinks: {
-            ...idea.projectLinks,
-            [projectId]: {
-              status: 'new',
-              priority: 'medium',
-              projectAngle: projectAngle || idea.title,
-              projectNotes: '',
-              publishedVideoUrl: '',
-              statusUpdatedAt: 'DEMO',
-            },
-          },
-        };
-      }),
-    );
-  };
+  const updateProjectIdeaAngle = useCallback(
+    async (
+      ideaId: string,
+      projectId: string,
+      angle: string,
+      notes: string,
+      publishedVideoUrl: string,
+      priority?: IdeaPriority,
+    ): Promise<boolean> => {
+      try {
+        const updated = await upsertProjectIdeaLinkApi(ideaId, projectId, {
+          projectAngle: angle,
+          projectNotes: notes,
+          publishedVideoUrl,
+          ...(priority ? { priority } : {}),
+        });
+        const mapped = mapIdeaDtoToItem(updated);
+        setIdeas((prev) => prev.map((i) => (i.id === ideaId ? mapped : i)));
+        setBackendOnline(true);
+        pushToast('success', 'Đã lưu góc khai thác & liên kết video cho Project.');
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể lưu thay đổi cho Project này.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
 
-  const deleteIdea = (ideaId: string) => {
-    setIdeas((prev) => prev.filter((i) => i.id !== ideaId));
-  };
+  const attachIdeaToProject = useCallback(
+    async (
+      ideaId: string,
+      projectId: string,
+      projectAngle: string,
+      priority: IdeaPriority = 'medium',
+    ): Promise<boolean> => {
+      try {
+        const updated = await upsertProjectIdeaLinkApi(ideaId, projectId, {
+          status: 'new',
+          priority,
+          projectAngle,
+        });
+        const mapped = mapIdeaDtoToItem(updated);
+        setIdeas((prev) => prev.map((i) => (i.id === ideaId ? mapped : i)));
+        setBackendOnline(true);
+        pushToast('success', 'Đã gắn Ý tưởng vào Project (không tạo bản sao gốc).');
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể gắn Ý tưởng vào Project.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
+
+  const detachIdeaFromProject = useCallback(
+    async (ideaId: string, projectId: string): Promise<boolean> => {
+      try {
+        const updated = await detachIdeaFromProjectApi(ideaId, projectId);
+        const mapped = mapIdeaDtoToItem(updated);
+        setIdeas((prev) => prev.map((i) => (i.id === ideaId ? mapped : i)));
+        setBackendOnline(true);
+        pushToast('success', 'Đã gỡ liên kết Ý tưởng khỏi Project này (bản gốc vẫn an toàn).');
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể gỡ Ý tưởng khỏi Project.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
+
+  const deleteIdea = useCallback(
+    async (ideaId: string): Promise<boolean> => {
+      try {
+        await deleteIdeaApi(ideaId);
+        setIdeas((prev) => prev.filter((i) => i.id !== ideaId));
+        setBackendOnline(true);
+        pushToast('success', 'Đã xóa vĩnh viễn Ý tưởng gốc.');
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể xóa Ý tưởng.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
 
   const effectiveUiMode: UiSimulatorMode = !backendOnline
     ? 'offline'
@@ -899,10 +992,13 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         deleteKeyword,
         scanKeywordDemo,
         ideas,
+        reloadIdeas,
         saveIdea,
+        updateIdeaCore,
         updateProjectIdeaStatus,
         updateProjectIdeaAngle,
         attachIdeaToProject,
+        detachIdeaFromProject,
         deleteIdea,
         autoRefreshEnabled: systemSettings.autoRefreshEnabled,
         setAutoRefreshEnabled: (next: boolean) => {

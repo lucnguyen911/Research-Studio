@@ -589,29 +589,33 @@ export const KeywordResearchScreen: React.FC = () => {
 export const ProjectIdeasScreen: React.FC = () => {
   const project = useActiveProject();
   const { currentEntry, navigate, updateViewState } = useAppNavigation();
-  const { uiMode, ideas, openSaveIdeaModal, updateProjectIdeaStatus, pushToast } = usePrototypeWorkspace();
+  const { isBootstrapping, ideas, openSaveIdeaModal, updateProjectIdeaStatus, detachIdeaFromProject } =
+    usePrototypeWorkspace();
   const vs = currentEntry.viewState;
 
   if (!project) return <NoProjectEmpty />;
 
-  const projectIdeas =
-    uiMode === 'empty'
-      ? []
-      : ideas.filter((idea) => {
-          const link = idea.projectLinks[project.id];
-          if (!link) return false;
-          if (vs.statusFilter !== 'all' && link.status !== vs.statusFilter) return false;
-          if (vs.priorityFilter !== 'all' && link.priority !== vs.priorityFilter) return false;
-          if (vs.search.trim()) {
-            const q = vs.search.trim().toLowerCase();
-            return (
-              idea.title.toLowerCase().includes(q) ||
-              link.projectAngle.toLowerCase().includes(q) ||
-              link.projectNotes.toLowerCase().includes(q)
-            );
-          }
-          return true;
-        });
+  const priorityLabels: Record<IdeaPriority, string> = {
+    high: 'Cao',
+    medium: 'Trung bình',
+    low: 'Thấp',
+  };
+
+  const projectIdeas = ideas.filter((idea) => {
+    const link = idea.projectLinks[project.id];
+    if (!link) return false;
+    if (vs.statusFilter !== 'all' && link.status !== vs.statusFilter) return false;
+    if (vs.priorityFilter !== 'all' && link.priority !== vs.priorityFilter) return false;
+    if (vs.search.trim()) {
+      const q = vs.search.trim().toLowerCase();
+      return (
+        idea.title.toLowerCase().includes(q) ||
+        link.projectAngle.toLowerCase().includes(q) ||
+        link.projectNotes.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   return (
     <div className="rs-container">
@@ -686,8 +690,8 @@ export const ProjectIdeasScreen: React.FC = () => {
         </div>
       </div>
 
-      {uiMode === 'loading' ? (
-        <LoadingSkeletonCard />
+      {isBootstrapping && ideas.length === 0 ? (
+        <LoadingSkeletonCard label="Đang tải danh sách Ý tưởng của Project từ SQLite..." />
       ) : projectIdeas.length === 0 ? (
         <EmptyStateCard
           title="Chưa có ý tưởng nào khớp trạng thái lọc"
@@ -711,6 +715,10 @@ export const ProjectIdeasScreen: React.FC = () => {
               {projectIdeas.map((idea) => {
                 const link = idea.projectLinks[project.id];
                 const otherProjectsCount = Math.max(0, Object.keys(idea.projectLinks).length - 1);
+                const safePublishedUrl =
+                  link.publishedVideoUrl.startsWith('https://') || link.publishedVideoUrl.startsWith('http://')
+                    ? link.publishedVideoUrl
+                    : '';
                 return (
                   <tr key={idea.id}>
                     <td style={{ minWidth: 320 }}>
@@ -724,11 +732,11 @@ export const ProjectIdeasScreen: React.FC = () => {
                       <div style={{ fontSize: '13px', color: 'var(--rs-text-secondary)', marginTop: 4 }}>
                         <strong>Góc khai thác:</strong> {link.projectAngle || '(Chưa nhập)'}
                       </div>
-                      {link.publishedVideoUrl && (
+                      {safePublishedUrl && (
                         <div style={{ fontSize: '12px', marginTop: 4 }}>
                           Video đã xuất bản:{' '}
-                          <a href={link.publishedVideoUrl} target="_blank" rel="noreferrer">
-                            {link.publishedVideoUrl}
+                          <a href={safePublishedUrl} target="_blank" rel="noreferrer">
+                            {safePublishedUrl}
                           </a>
                         </div>
                       )}
@@ -741,14 +749,16 @@ export const ProjectIdeasScreen: React.FC = () => {
                       )}
                     </td>
                     <td>
-                      <span className="rs-badge">{link.priority}</span>
+                      <span className="rs-badge">{priorityLabels[link.priority]}</span>
                     </td>
                     <td>
                       <select
                         aria-label={`Trạng thái cho ${idea.title}`}
                         className="rs-select rs-select-compact"
                         value={link.status}
-                        onChange={(e) => updateProjectIdeaStatus(idea.id, project.id, e.target.value as IdeaStatus)}
+                        onChange={(e) => {
+                          void updateProjectIdeaStatus(idea.id, project.id, e.target.value as IdeaStatus);
+                        }}
                       >
                         {(Object.keys(IDEA_STATUS_LABELS) as IdeaStatus[]).map((st) => (
                           <option key={st} value={st}>
@@ -758,7 +768,7 @@ export const ProjectIdeasScreen: React.FC = () => {
                       </select>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: 6 }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         <button
                           type="button"
                           className="rs-btn rs-btn-sm rs-btn-secondary"
@@ -769,9 +779,11 @@ export const ProjectIdeasScreen: React.FC = () => {
                         <button
                           type="button"
                           className="rs-btn rs-btn-sm rs-btn-ghost"
-                          onClick={() => pushToast('error', 'Ví dụ Toast báo lỗi thao tác (DEMO).')}
+                          onClick={() => {
+                            void detachIdeaFromProject(idea.id, project.id);
+                          }}
                         >
-                          Thử lỗi Toast
+                          Gỡ khỏi Project
                         </button>
                       </div>
                     </td>

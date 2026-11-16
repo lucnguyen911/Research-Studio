@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { formatInt } from '../prototype/demoData';
-import type { ProjectItem } from '../prototype/types';
+import type { IdeaPriority, ProjectItem } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
 import { usePrototypeWorkspace, type SaveIdeaDraft } from '../state/workspaceContext';
 import { FormatBadgeGroup } from './FormatBadgeGroup';
@@ -142,10 +142,12 @@ const SaveIdeaModalBody: React.FC<{
   const [title, setTitle] = useState(draft.title);
   const [notes, setNotes] = useState('');
   const [projectAngle, setProjectAngle] = useState('');
+  const [priority, setPriority] = useState<IdeaPriority>('medium');
   const [inGlobalVault, setInGlobalVault] = useState(true);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(() =>
     currentEntry.projectId && projects.some((p) => p.id === currentEntry.projectId) ? [currentEntry.projectId] : [],
   );
+  const [saving, setSaving] = useState(false);
 
   const togglePid = (pid: string) => {
     setSelectedProjectIds((prev) => (prev.includes(pid) ? prev.filter((id) => id !== pid) : [...prev, pid]));
@@ -158,7 +160,7 @@ const SaveIdeaModalBody: React.FC<{
           <h2 id="save-idea-title" style={{ margin: 0, fontSize: '17px' }}>
             Lưu thành Ý tưởng (User-Created Data)
           </h2>
-          <button type="button" className="rs-btn rs-btn-ghost rs-btn-sm" onClick={onClose}>
+          <button type="button" className="rs-btn rs-btn-ghost rs-btn-sm" onClick={onClose} disabled={saving}>
             Đóng
           </button>
         </div>
@@ -201,16 +203,30 @@ const SaveIdeaModalBody: React.FC<{
         </div>
 
         {selectedProjectIds.length > 0 && (
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontWeight: 600 }}>Góc khai thác cho Project đã chọn</span>
-            <input
-              type="text"
-              className="rs-input"
-              placeholder="Ví dụ: Bóc tách case study cho khán giả Việt Nam"
-              value={projectAngle}
-              onChange={(e) => setProjectAngle(e.target.value)}
-            />
-          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontWeight: 600 }}>Góc khai thác cho Project đã chọn</span>
+              <input
+                type="text"
+                className="rs-input"
+                placeholder="Ví dụ: Bóc tách case study cho khán giả Việt Nam"
+                value={projectAngle}
+                onChange={(e) => setProjectAngle(e.target.value)}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontWeight: 600 }}>Mức ưu tiên triển khai</span>
+              <select
+                className="rs-select"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as IdeaPriority)}
+              >
+                <option value="high">Cao (Ưu tiên làm trước)</option>
+                <option value="medium">Trung bình</option>
+                <option value="low">Thấp (Làm sau)</option>
+              </select>
+            </label>
+          </div>
         )}
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
@@ -219,15 +235,16 @@ const SaveIdeaModalBody: React.FC<{
         </label>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button type="button" className="rs-btn rs-btn-secondary" onClick={onClose}>
+          <button type="button" className="rs-btn rs-btn-secondary" onClick={onClose} disabled={saving}>
             Hủy
           </button>
           <button
             type="button"
             className="rs-btn rs-btn-primary"
-            disabled={!title.trim()}
+            disabled={!title.trim() || saving}
             onClick={() => {
-              saveIdea({
+              setSaving(true);
+              void saveIdea({
                 title,
                 notes,
                 sourceType: draft.sourceType,
@@ -238,11 +255,14 @@ const SaveIdeaModalBody: React.FC<{
                 inGlobalVault,
                 targetProjectIds: selectedProjectIds,
                 projectAngle,
+                priority,
+              }).then((ok) => {
+                setSaving(false);
+                if (ok) onClose();
               });
-              onClose();
             }}
           >
-            Lưu Ý tưởng vĩnh viễn
+            {saving ? 'Đang lưu...' : 'Lưu Ý tưởng vĩnh viễn'}
           </button>
         </div>
       </div>

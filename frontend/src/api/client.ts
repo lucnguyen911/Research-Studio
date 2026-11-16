@@ -1,9 +1,11 @@
 import type {
   ApiErrorEnvelope,
   ChannelDetailResponseDto,
+  CreateIdeaPayload,
   CreateProjectPayload,
   DeleteProjectResultDto,
   FreeSearchResponseDto,
+  IdeaDto,
   ProjectDto,
   PurgeCacheResultDto,
   QuotaStatusDto,
@@ -16,8 +18,10 @@ import type {
   SearchSessionDto,
   SystemSettingsDto,
   TrendsResponseDto,
+  UpdateIdeaCorePayload,
   UpdateProjectPayload,
   UpdateSystemSettingsPayload,
+  UpsertProjectIdeaLinkPayload,
   VideoDetailResponseDto,
   YoutubeCategoryDto,
 } from './types';
@@ -505,4 +509,96 @@ export async function fetchRssPhrasesApi(
   const query = qs.toString();
   return apiRequest<RssPhrasesResponseDto>(`/api/v1/rss/phrases${query ? `?${query}` : ''}`, { signal });
 }
+
+export async function fetchIdeasApi(
+  options?: {
+    projectId?: string;
+    onlyGlobalVault?: boolean;
+    status?: string;
+    priority?: string;
+    sourceType?: string;
+    linkState?: string;
+    search?: string;
+  },
+  signal?: AbortSignal,
+): Promise<IdeaDto[]> {
+  const qs = new URLSearchParams();
+  if (options?.projectId) qs.set('projectId', options.projectId);
+  if (options?.onlyGlobalVault) qs.set('onlyGlobalVault', 'true');
+  if (options?.status && options.status !== 'all') qs.set('status', options.status);
+  if (options?.priority && options.priority !== 'all') qs.set('priority', options.priority);
+  if (options?.sourceType && options.sourceType !== 'all') qs.set('sourceType', options.sourceType);
+  if (options?.linkState && options.linkState !== 'all') qs.set('linkState', options.linkState);
+  if (options?.search?.trim()) qs.set('search', options.search.trim());
+  const query = qs.toString();
+  const res = await apiRequest<{ items: IdeaDto[] }>(`/api/v1/ideas${query ? `?${query}` : ''}`, { signal });
+  return res.items;
+}
+
+export async function createIdeaApi(payload: CreateIdeaPayload, signal?: AbortSignal): Promise<IdeaDto> {
+  const res = await apiRequest<{ idea: IdeaDto }>('/api/v1/ideas', {
+    method: 'POST',
+    body: payload,
+    signal,
+  });
+  return res.idea;
+}
+
+export async function fetchIdeaDetailApi(ideaId: string, signal?: AbortSignal): Promise<IdeaDto> {
+  const res = await apiRequest<{ idea: IdeaDto }>(`/api/v1/ideas/${encodeURIComponent(ideaId)}`, { signal });
+  return res.idea;
+}
+
+export async function updateIdeaCoreApi(
+  ideaId: string,
+  patch: UpdateIdeaCorePayload,
+  signal?: AbortSignal,
+): Promise<IdeaDto> {
+  const res = await apiRequest<{ idea: IdeaDto }>(`/api/v1/ideas/${encodeURIComponent(ideaId)}`, {
+    method: 'PUT',
+    body: patch,
+    signal,
+  });
+  return res.idea;
+}
+
+export async function deleteIdeaApi(ideaId: string, signal?: AbortSignal): Promise<void> {
+  await apiRequest<{ deletedIdeaId: string }>(`/api/v1/ideas/${encodeURIComponent(ideaId)}`, {
+    method: 'DELETE',
+    signal,
+  });
+}
+
+export async function upsertProjectIdeaLinkApi(
+  ideaId: string,
+  projectId: string,
+  patch: UpsertProjectIdeaLinkPayload,
+  signal?: AbortSignal,
+): Promise<IdeaDto> {
+  const res = await apiRequest<{ idea: IdeaDto }>(
+    `/api/v1/ideas/${encodeURIComponent(ideaId)}/projects/${encodeURIComponent(projectId)}`,
+    {
+      method: 'PUT',
+      body: patch,
+      signal,
+    },
+  );
+  return res.idea;
+}
+
+export async function detachIdeaFromProjectApi(
+  ideaId: string,
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<IdeaDto> {
+  const res = await apiRequest<{ idea: IdeaDto }>(
+    `/api/v1/ideas/${encodeURIComponent(ideaId)}/projects/${encodeURIComponent(projectId)}`,
+    {
+      method: 'DELETE',
+      signal,
+    },
+  );
+  return res.idea;
+}
+
 

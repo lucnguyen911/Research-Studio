@@ -1208,24 +1208,28 @@ export const RssNewsScreen: React.FC = () => {
 
 export const GlobalIdeaVaultScreen: React.FC = () => {
   const { currentEntry, navigate, updateViewState } = useAppNavigation();
-  const { uiMode, ideas, projects, openSaveIdeaModal, attachIdeaToProject, deleteIdea } = usePrototypeWorkspace();
+  const { isBootstrapping, ideas, projects, openSaveIdeaModal, attachIdeaToProject, deleteIdea } =
+    usePrototypeWorkspace();
   const [confirmIdeaId, setConfirmIdeaId] = useState<string | null>(null);
   const vs = currentEntry.viewState;
 
-  const filtered =
-    uiMode === 'empty'
-      ? []
-      : ideas.filter((idea) => {
-          if (vs.originFilter !== 'all' && idea.sourceType !== vs.originFilter) return false;
-          const linkCount = Object.keys(idea.projectLinks).length;
-          if (vs.linkStateFilter === 'unlinked' && linkCount > 0) return false;
-          if (vs.linkStateFilter === 'linked' && linkCount === 0) return false;
-          if (vs.search.trim()) {
-            const q = vs.search.trim().toLowerCase();
-            return idea.title.toLowerCase().includes(q) || idea.notes.toLowerCase().includes(q);
-          }
-          return true;
-        });
+  const vaultIdeas = ideas.filter((idea) => idea.inGlobalVault);
+
+  const filtered = vaultIdeas.filter((idea) => {
+    if (vs.originFilter !== 'all' && idea.sourceType !== vs.originFilter) return false;
+    const linkCount = Object.keys(idea.projectLinks).length;
+    if (vs.linkStateFilter === 'unlinked' && linkCount > 0) return false;
+    if (vs.linkStateFilter === 'linked' && linkCount === 0) return false;
+    if (vs.search.trim()) {
+      const q = vs.search.trim().toLowerCase();
+      return (
+        idea.title.toLowerCase().includes(q) ||
+        idea.notes.toLowerCase().includes(q) ||
+        idea.sourceTitleSnapshot.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   const targetDeleteIdea = ideas.find((i) => i.id === confirmIdeaId) ?? null;
 
@@ -1291,19 +1295,19 @@ export const GlobalIdeaVaultScreen: React.FC = () => {
         </select>
       </div>
 
-      {uiMode === 'loading' ? (
-        <LoadingSkeletonCard />
+      {isBootstrapping && ideas.length === 0 ? (
+        <LoadingSkeletonCard label="Đang tải Kho ý tưởng chung từ SQLite..." />
       ) : filtered.length === 0 ? (
         <EmptyStateCard
           title="Chưa có ý tưởng nào khớp bộ lọc"
-          description="Tạo ý tưởng viết tay mới hoặc lưu ý tưởng từ Khám phá xu hướng / Tin tức RSS."
+          description="Tạo ý tưởng viết tay mới hoặc lưu ý tưởng từ Khám phá xu hướng / Tìm kiếm / Tin tức RSS."
           actionLabel="+ Tạo Ý tưởng mới"
           onAction={() =>
             openSaveIdeaModal({
-              title: 'Ý tưởng mới',
+              title: '',
               sourceType: 'manual',
-              sourceRefId: 'manual-new',
-              sourceTitleSnapshot: 'Viết tay',
+              sourceRefId: `manual-${Date.now()}`,
+              sourceTitleSnapshot: 'Tạo viết tay trong Kho chung',
               sourceUrl: '',
               tags: [],
             })
@@ -1322,6 +1326,8 @@ export const GlobalIdeaVaultScreen: React.FC = () => {
             <tbody>
               {filtered.map((idea) => {
                 const unattachedProjects = projects.filter((p) => !idea.projectLinks[p.id]);
+                const safeSourceUrl =
+                  idea.sourceUrl.startsWith('https://') || idea.sourceUrl.startsWith('http://') ? idea.sourceUrl : '';
                 return (
                   <tr key={idea.id}>
                     <td style={{ minWidth: 340 }}>
@@ -1332,11 +1338,20 @@ export const GlobalIdeaVaultScreen: React.FC = () => {
                       >
                         {idea.title}
                       </button>
-                      <p style={{ margin: '4px 0', fontSize: '13px', color: 'var(--rs-text-secondary)' }}>
-                        {idea.notes}
-                      </p>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                        <span className="rs-badge">Nguồn: {idea.sourceTitleSnapshot}</span>
+                      {idea.notes && (
+                        <p style={{ margin: '4px 0', fontSize: '13px', color: 'var(--rs-text-secondary)' }}>
+                          {idea.notes}
+                        </p>
+                      )}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginTop: 4 }}>
+                        <span className="rs-badge">
+                          Nguồn: {idea.sourceTitleSnapshot || 'Tạo thủ công'}
+                        </span>
+                        {safeSourceUrl && (
+                          <a href={safeSourceUrl} target="_blank" rel="noreferrer" className="rs-badge">
+                            Mở liên kết nguồn ↗
+                          </a>
+                        )}
                         {idea.apiPurged && (
                           <span className="rs-badge rs-badge-warning">
                             Metadata YouTube API đã hết hạn 30 ngày — Đã bảo toàn Ý tưởng
@@ -1352,7 +1367,7 @@ export const GlobalIdeaVaultScreen: React.FC = () => {
                           Object.entries(idea.projectLinks).map(([pid, link]) => {
                             const proj = projects.find((p) => p.id === pid);
                             return (
-                              <span key={pid} className="rs-badge rs-badge-demo">
+                              <span key={pid} className="rs-badge">
                                 {proj?.name ?? pid}: {IDEA_STATUS_LABELS[link.status]}
                               </span>
                             );
@@ -1365,7 +1380,7 @@ export const GlobalIdeaVaultScreen: React.FC = () => {
                             value=""
                             onChange={(e) => {
                               if (e.target.value) {
-                                attachIdeaToProject(idea.id, e.target.value, idea.title);
+                                void attachIdeaToProject(idea.id, e.target.value, idea.title);
                               }
                             }}
                           >
@@ -1414,7 +1429,9 @@ export const GlobalIdeaVaultScreen: React.FC = () => {
         confirmLabel="Xác nhận xóa Ý tưởng"
         onCancel={() => setConfirmIdeaId(null)}
         onConfirm={() => {
-          if (targetDeleteIdea) deleteIdea(targetDeleteIdea.id);
+          if (targetDeleteIdea) {
+            void deleteIdea(targetDeleteIdea.id);
+          }
           setConfirmIdeaId(null);
         }}
       />
