@@ -35,7 +35,7 @@ class EndToEndResilienceSecurityAndBenchmarkTests(unittest.TestCase):
         headers = {CSRF_HEADER_NAME: CSRF_HEADER_VALUE}
         with TestClient(create_app()) as client:
             # 1) Global research & Idea Vault work seamlessly with 0 Projects (AC-02)
-            assert client.get("/api/v1/global/overview", headers=headers).json()["projectsCount"] == 0
+            self.assertEqual(client.get("/api/v1/global/overview", headers=headers).json()["projectsCount"], 0)
             vault_idea = client.post(
                 "/api/v1/ideas",
                 headers=headers,

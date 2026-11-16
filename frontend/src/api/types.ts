@@ -515,6 +515,8 @@ export interface ProjectOverviewDto {
 export interface ProjectRefreshResponseDto {
   overview: ProjectOverviewDto;
   rssRefreshedCount: number;
+  rssOkCount?: number;
+  rssErrorCount?: number;
   competitorSummary: CompetitorRefreshResponseDto | null;
   competitorsSkippedReason: string | null;
   quota: QuotaStatusDto;

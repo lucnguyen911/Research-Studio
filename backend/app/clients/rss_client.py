@@ -1,20 +1,24 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from contextlib import contextmanager
 from email.utils import parsedate_to_datetime
+import functools
 import hashlib
 import html
 from html.parser import HTMLParser
 import ipaddress
 import re
 import socket
+import ssl
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 import xml.etree.ElementTree as stdlib_ET
 
+import anyio
+import certifi
 from defusedxml import ElementTree as DefusedET
 from defusedxml.common import DefusedXmlException
-import anyio
 import httpcore
 import httpx
 
@@ -95,6 +99,10 @@ def _default_dns_resolver(host: str, port: int) -> list[tuple[Any, ...]]:
     return socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
 
 
+_NAT64_WELL_KNOWN_NET = ipaddress.ip_network("64:ff9b::/96")
+_NAT64_LOCAL_USE_NET = ipaddress.ip_network("64:ff9b:1::/48")
+
+
 def _ensure_ip_globally_routable(raw_ip: str) -> None:
     stripped = raw_ip.split("%")[0].strip()
     try:
@@ -105,6 +113,27 @@ def _ensure_ip_globally_routable(raw_ip: str) -> None:
     mapped = getattr(ip, "ipv4_mapped", None)
     if mapped is not None:
         _ensure_ip_globally_routable(str(mapped))
+
+    sixtofour = getattr(ip, "sixtofour", None)
+    if sixtofour is not None:
+        _ensure_ip_globally_routable(str(sixtofour))
+
+    teredo = getattr(ip, "teredo", None)
+    if teredo is not None:
+        for embedded_ip in teredo:
+            _ensure_ip_globally_routable(str(embedded_ip))
+
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip in _NAT64_WELL_KNOWN_NET:
+            embedded_v4 = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+            _ensure_ip_globally_routable(str(embedded_v4))
+        elif ip in _NAT64_LOCAL_USE_NET:
+            raise AppError(
+                code="RSS_SSRF_BLOCKED",
+                message="Bị chặn vì lý do bảo mật SSRF: không cho phép dải NAT64 nội bộ.",
+                status_code=400,
+                details={"blockedIp": str(ip)},
+            )
 
     if (
         not ip.is_global
@@ -302,6 +331,40 @@ def parse_feed_xml(raw_bytes: bytes) -> list[dict[str, Any]]:
     return articles
 
 
+@functools.lru_cache(maxsize=1)
+def _get_verified_ssl_context() -> ssl.SSLContext:
+    """Build and cache verified SSLContext once per process so CA loading never blocks asyncio loops."""
+    return ssl.create_default_context(cafile=certifi.where())
+
+
+_HTTPCORE_TO_HTTPX_ERRORS: tuple[tuple[type[BaseException], type[Exception]], ...] = (
+    (httpcore.ConnectTimeout, httpx.ConnectTimeout),
+    (httpcore.ReadTimeout, httpx.ReadTimeout),
+    (httpcore.WriteTimeout, httpx.WriteTimeout),
+    (httpcore.PoolTimeout, httpx.PoolTimeout),
+    (httpcore.TimeoutException, httpx.TimeoutException),
+    (httpcore.ConnectError, httpx.ConnectError),
+    (httpcore.ReadError, httpx.ReadError),
+    (httpcore.WriteError, httpx.WriteError),
+    (httpcore.NetworkError, httpx.NetworkError),
+    (httpcore.RemoteProtocolError, httpx.RemoteProtocolError),
+    (httpcore.LocalProtocolError, httpx.LocalProtocolError),
+    (httpcore.ProtocolError, httpx.ProtocolError),
+    (httpcore.ProxyError, httpx.ProxyError),
+)
+
+
+@contextmanager
+def _map_pinned_httpcore_exceptions() -> Iterator[None]:
+    try:
+        yield
+    except Exception as exc:
+        for core_exc, httpx_exc in _HTTPCORE_TO_HTTPX_ERRORS:
+            if isinstance(exc, core_exc):
+                raise httpx_exc(str(exc)) from exc
+        raise
+
+
 class _SafePublicNetworkBackend(httpcore.AsyncNetworkBackend):
     """Resolve hostname once per TCP connection, enforce global-IP validation, and connect by pinned IP."""
 
@@ -359,7 +422,7 @@ class _SafePublicNetworkBackend(httpcore.AsyncNetworkBackend):
             if not validated_ips:
                 raise AppError("RSS_DNS_FAILED", f"Tên miền {clean_host} không trả về địa chỉ IP hợp lệ.", status_code=400)
 
-            last_connect_err: httpcore.ConnectError | None = None
+            last_connect_err: Exception | None = None
             for target_ip in validated_ips:
                 try:
                     return await self._inner.connect_tcp(
@@ -369,10 +432,11 @@ class _SafePublicNetworkBackend(httpcore.AsyncNetworkBackend):
                         local_address=local_address,
                         socket_options=socket_options,
                     )
-                except httpcore.ConnectError as exc:
+                except (httpcore.ConnectError, httpcore.ConnectTimeout, OSError) as exc:
                     last_connect_err = exc
-            assert last_connect_err is not None
-            raise last_connect_err
+            if isinstance(last_connect_err, (httpcore.ConnectError, httpcore.ConnectTimeout)):
+                raise last_connect_err
+            raise httpcore.ConnectError(str(last_connect_err or "TCP connect failed")) from last_connect_err
 
         _ensure_ip_globally_routable(clean_host)
         return await self._inner.connect_tcp(
@@ -395,19 +459,60 @@ class _SafePublicNetworkBackend(httpcore.AsyncNetworkBackend):
         await self._inner.sleep(seconds)
 
 
-class _PinnedPublicHTTPTransport(httpx.AsyncHTTPTransport):
-    """HTTP transport pinning outbound connections to DNS-validated public IPs against TOCTOU rebinding."""
+class _PinnedResponseStream(httpx.AsyncByteStream):
+    """Stream wrapper converting httpcore byte stream exceptions into public httpx exceptions."""
+
+    def __init__(self, httpcore_stream: AsyncIterator[bytes]) -> None:
+        self._httpcore_stream = httpcore_stream
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        with _map_pinned_httpcore_exceptions():
+            async for chunk in self._httpcore_stream:
+                yield chunk
+
+    async def aclose(self) -> None:
+        aclose_fn = getattr(self._httpcore_stream, "aclose", None)
+        if callable(aclose_fn):
+            await aclose_fn()
+
+
+class _PinnedPublicHTTPTransport(httpx.AsyncBaseTransport):
+    """Public AsyncBaseTransport pinning connections to DNS-validated public IPs against TOCTOU rebinding."""
 
     def __init__(self, *, resolver: DnsResolver | None = None) -> None:
-        super().__init__(verify=True, trust_env=False, retries=0)
-        ssl_context = httpx.create_ssl_context(verify=True, trust_env=False)
         self._pool = httpcore.AsyncConnectionPool(
-            ssl_context=ssl_context,
+            ssl_context=_get_verified_ssl_context(),
             max_connections=10,
             max_keepalive_connections=5,
             retries=0,
             network_backend=_SafePublicNetworkBackend(resolver=resolver),
         )
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        core_req = httpcore.Request(
+            method=request.method,
+            url=httpcore.URL(
+                scheme=request.url.raw_scheme,
+                host=request.url.raw_host,
+                port=request.url.port,
+                target=request.url.raw_path,
+            ),
+            headers=request.headers.raw,
+            content=request.stream,
+            extensions=request.extensions,
+        )
+        with _map_pinned_httpcore_exceptions():
+            core_resp = await self._pool.handle_async_request(core_req)
+
+        return httpx.Response(
+            status_code=core_resp.status,
+            headers=core_resp.headers,
+            stream=_PinnedResponseStream(core_resp.stream),
+            extensions=core_resp.extensions,
+        )
+
+    async def aclose(self) -> None:
+        await self._pool.aclose()
 
 
 async def fetch_and_parse_feed(
@@ -423,7 +528,7 @@ async def fetch_and_parse_feed(
     - Aborts streaming payloads larger than 5 MB.
     - Parses via defusedxml and strips unsafe HTML subtrees via HTMLParser.
     """
-    current_url = validate_public_feed_url(url, resolver=resolver)
+    current_url = await anyio.to_thread.run_sync(lambda: validate_public_feed_url(url, resolver=resolver))
     timeout = httpx.Timeout(timeout=HTTP_READ_TIMEOUT_SEC, connect=HTTP_CONNECT_TIMEOUT_SEC)
     active_transport: httpx.AsyncBaseTransport = (
         transport if transport is not None else _PinnedPublicHTTPTransport(resolver=resolver)
@@ -449,7 +554,9 @@ async def fetch_and_parse_feed(
                         if hop >= MAX_RSS_REDIRECT_HOPS:
                             raise AppError("RSS_TOO_MANY_REDIRECTS", "Nguồn RSS chuyển hướng quá 3 lần.", status_code=502)
                         next_url = urljoin(current_url, location)
-                        current_url = validate_public_feed_url(next_url, resolver=resolver)
+                        current_url = await anyio.to_thread.run_sync(
+                            lambda: validate_public_feed_url(next_url, resolver=resolver)
+                        )
                         continue
 
                     if response.status_code >= 400:

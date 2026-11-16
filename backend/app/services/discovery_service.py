@@ -35,6 +35,26 @@ def _normalize_now(now_utc: datetime | None) -> datetime:
     return now_utc.astimezone(timezone.utc)
 
 
+def _validate_published_after(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    cleaned = raw.strip()
+    if not cleaned:
+        return None
+    normalized = f"{cleaned[:-1]}+00:00" if cleaned.endswith(("Z", "z")) else cleaned
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise AppError(
+            code="INVALID_PUBLISHED_AFTER",
+            message="Tham số publishedAfter phải có định dạng thời gian ISO-8601 hợp lệ.",
+            status_code=400,
+        ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _trend_query_key(region_code: str, category_id: str) -> str:
     clean_region = region_code.strip().upper()[:8] or "VN"
     clean_cat = category_id.strip() or "all"
@@ -126,6 +146,7 @@ async def refresh_trends(
                 )
                 ordered_ids.append(item["video_id"])
 
+            conn.execute("DELETE FROM search_sessions WHERE query_text = ?", (key,))
             conn.execute(
                 """
                 INSERT INTO search_sessions (
@@ -240,6 +261,7 @@ async def run_free_search(
     order_by: str = "relevance",
     max_results: int = SEARCH_MAX_RESULTS_PER_CALL,
     page_token: str | None = None,
+    append_session_id: str | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
     retry_backoff_sec: float = 0.15,
     now_utc: datetime | None = None,
@@ -252,17 +274,19 @@ async def run_free_search(
     clean_query = query.strip()
     if not clean_query:
         raise AppError("SEARCH_QUERY_EMPTY", "Vui lòng nhập từ khóa trước khi tìm kiếm.", status_code=400)
+    clean_published_after = _validate_published_after(published_after)
     clean_type = "channel" if object_type == "channel" else "video"
     clean_region = region_code.strip().upper()[:8] or "VN"
     clean_lang = relevance_language.strip().lower()[:16] or "vi"
     clean_order = order_by if order_by in ("relevance", "date", "viewCount", "rating") else "relevance"
+    clean_append_id = append_session_id.strip() if append_session_id and append_session_id.strip() else None
 
     found_ids, next_page_token = await youtube_client.search_youtube_page(
         query=clean_query,
         object_type=clean_type,
         region_code=clean_region,
         relevance_language=clean_lang,
-        published_after=published_after,
+        published_after=clean_published_after,
         order_by=clean_order,
         max_results=max_results,
         page_token=page_token,
@@ -288,12 +312,12 @@ async def run_free_search(
 
     utc_now = _normalize_now(now_utc)
     fetched_iso, expires_iso = youtube_repo.compute_api_timestamps(utc_now)
-    session_id = f"sess-{uuid.uuid4().hex[:10]}"
+    new_session_id = f"sess-{uuid.uuid4().hex[:10]}"
 
     def _persist() -> dict[str, Any]:
         with write_db() as conn:
-            ordered_video_ids: list[str] = []
-            ordered_channel_ids: list[str] = []
+            new_video_ids: list[str] = []
+            new_channel_ids: list[str] = []
 
             if clean_type == "video":
                 by_vid = {v["video_id"]: v for v in video_items}
@@ -302,8 +326,7 @@ async def run_free_search(
                     if v is None:
                         continue
                     youtube_repo.upsert_video_and_snapshot(conn=conn, now_utc=utc_now, **v)
-                    ordered_video_ids.append(vid)
-                result_count = len(ordered_video_ids)
+                    new_video_ids.append(vid)
             else:
                 by_cid = {c["channel_id"]: c for c in channel_items}
                 for cid in found_ids:
@@ -311,56 +334,119 @@ async def run_free_search(
                     if c is None:
                         continue
                     youtube_repo.upsert_channel(conn=conn, now_utc=utc_now, **c)
-                    ordered_channel_ids.append(cid)
-                result_count = len(ordered_channel_ids)
+                    new_channel_ids.append(cid)
 
-            conn.execute(
-                """
-                INSERT INTO search_sessions (
-                    id, query_text, object_type, region_code, relevance_language,
-                    published_after, order_by, result_count, api_fetched_at, api_expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    session_id,
-                    clean_query,
-                    clean_type,
-                    clean_region,
-                    clean_lang,
-                    published_after,
-                    clean_order,
-                    result_count,
-                    fetched_iso,
-                    expires_iso,
-                ),
-            )
-            pos = 1
-            for vid in ordered_video_ids:
+            existing_sess = None
+            if clean_append_id is not None:
+                existing_sess = conn.execute(
+                    """
+                    SELECT *
+                    FROM search_sessions
+                    WHERE id = ? AND object_type = ? AND query_text NOT LIKE ?
+                    """,
+                    (clean_append_id, clean_type, f"{TREND_SESSION_PREFIX}%"),
+                ).fetchone()
+
+            if existing_sess is not None:
+                active_session_id = str(existing_sess["id"])
+                existing_rows = conn.execute(
+                    "SELECT position, video_id, channel_id FROM search_session_items WHERE session_id = ? ORDER BY position ASC",
+                    (active_session_id,),
+                ).fetchall()
+                existing_video_ids = [str(r["video_id"]) for r in existing_rows if r["video_id"]]
+                existing_channel_ids = [str(r["channel_id"]) for r in existing_rows if r["channel_id"]]
+                seen_vids = set(existing_video_ids)
+                seen_cids = set(existing_channel_ids)
+                delta_vids = [vid for vid in new_video_ids if vid not in seen_vids and not seen_vids.add(vid)]
+                delta_cids = [cid for cid in new_channel_ids if cid not in seen_cids and not seen_cids.add(cid)]
+                next_pos = (max((int(r["position"]) for r in existing_rows), default=0)) + 1
+
+                for vid in delta_vids:
+                    conn.execute(
+                        "INSERT INTO search_session_items (session_id, position, video_id, channel_id) VALUES (?, ?, ?, NULL)",
+                        (active_session_id, next_pos, vid),
+                    )
+                    next_pos += 1
+                for cid in delta_cids:
+                    conn.execute(
+                        "INSERT INTO search_session_items (session_id, position, video_id, channel_id) VALUES (?, ?, NULL, ?)",
+                        (active_session_id, next_pos, cid),
+                    )
+                    next_pos += 1
+
+                ordered_video_ids = existing_video_ids + delta_vids
+                ordered_channel_ids = existing_channel_ids + delta_cids
+                result_count = len(ordered_video_ids) + len(ordered_channel_ids)
                 conn.execute(
-                    "INSERT INTO search_session_items (session_id, position, video_id, channel_id) VALUES (?, ?, ?, NULL)",
-                    (session_id, pos, vid),
+                    """
+                    UPDATE search_sessions
+                    SET result_count = ?, api_fetched_at = ?, api_expires_at = ?
+                    WHERE id = ?
+                    """,
+                    (result_count, fetched_iso, expires_iso, active_session_id),
                 )
-                pos += 1
-            for cid in ordered_channel_ids:
+                session_query = str(existing_sess["query_text"])
+                session_region = str(existing_sess["region_code"])
+                session_lang = str(existing_sess["relevance_language"])
+                session_pub_after = existing_sess["published_after"]
+                session_order = str(existing_sess["order_by"])
+            else:
+                active_session_id = new_session_id
+                ordered_video_ids = new_video_ids
+                ordered_channel_ids = new_channel_ids
+                result_count = len(ordered_video_ids) + len(ordered_channel_ids)
                 conn.execute(
-                    "INSERT INTO search_session_items (session_id, position, video_id, channel_id) VALUES (?, ?, NULL, ?)",
-                    (session_id, pos, cid),
+                    """
+                    INSERT INTO search_sessions (
+                        id, query_text, object_type, region_code, relevance_language,
+                        published_after, order_by, result_count, api_fetched_at, api_expires_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        active_session_id,
+                        clean_query,
+                        clean_type,
+                        clean_region,
+                        clean_lang,
+                        clean_published_after,
+                        clean_order,
+                        result_count,
+                        fetched_iso,
+                        expires_iso,
+                    ),
                 )
-                pos += 1
+                pos = 1
+                for vid in ordered_video_ids:
+                    conn.execute(
+                        "INSERT INTO search_session_items (session_id, position, video_id, channel_id) VALUES (?, ?, ?, NULL)",
+                        (active_session_id, pos, vid),
+                    )
+                    pos += 1
+                for cid in ordered_channel_ids:
+                    conn.execute(
+                        "INSERT INTO search_session_items (session_id, position, video_id, channel_id) VALUES (?, ?, NULL, ?)",
+                        (active_session_id, pos, cid),
+                    )
+                    pos += 1
+                session_query = clean_query
+                session_region = clean_region
+                session_lang = clean_lang
+                session_pub_after = clean_published_after
+                session_order = clean_order
 
             videos_map = youtube_repo.get_valid_videos_by_ids(conn, ordered_video_ids, now_iso=fetched_iso)
             channels_map = youtube_repo.get_valid_channels_by_ids(conn, ordered_channel_ids, now_iso=fetched_iso)
 
         return {
             "session": {
-                "id": session_id,
-                "query": clean_query,
+                "id": active_session_id,
+                "query": session_query,
                 "objectType": clean_type,
-                "regionCode": clean_region,
-                "relevanceLanguage": clean_lang,
-                "publishedAfter": published_after,
-                "orderBy": clean_order,
-                "resultCount": len(ordered_video_ids) + len(ordered_channel_ids),
+                "regionCode": session_region,
+                "relevanceLanguage": session_lang,
+                "publishedAfter": session_pub_after,
+                "orderBy": session_order,
+                "resultCount": result_count,
                 "apiFetchedAt": fetched_iso,
                 "apiExpiresAt": expires_iso,
             },

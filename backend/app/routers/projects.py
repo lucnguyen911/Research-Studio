@@ -140,9 +140,13 @@ async def refresh_project_workspace(project_id: str) -> dict[str, object]:
     def _finish() -> dict[str, object]:
         summary = youtube_repo.get_project_overview_summary(project_id)
         latest_articles = rss_repo.list_articles(project_id=project_id, limit=4) if project["linkedFeedIds"] else []
+        rss_ok = sum(1 for r in rss_results if r.get("status") == "ok")
+        rss_err = sum(1 for r in rss_results if r.get("status") == "error")
         return {
             "overview": {**summary, "latestRssArticles": latest_articles},
             "rssRefreshedCount": len(rss_results),
+            "rssOkCount": rss_ok,
+            "rssErrorCount": rss_err,
             "competitorSummary": competitor_result,
             "competitorsSkippedReason": competitors_skipped_reason,
             "quota": quota_service.get_quota_status(),

@@ -533,7 +533,12 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
       const next = { ...prev };
       let changed = false;
       for (const v of videos) {
-        if (v.defaultManualFormat !== 'none' && next[v.id] !== v.defaultManualFormat) {
+        if (v.defaultManualFormat === 'none') {
+          if (next[v.id] !== undefined) {
+            delete next[v.id];
+            changed = true;
+          }
+        } else if (next[v.id] !== v.defaultManualFormat) {
           next[v.id] = v.defaultManualFormat;
           changed = true;
         }
@@ -788,6 +793,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
+          void syncQuotaStatus();
           pushToast('error', formatErrorToast(err, 'Không thể thêm kênh đối thủ vào Project.'));
         }
         return false;

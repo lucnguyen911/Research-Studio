@@ -852,6 +852,8 @@ const IdeaCoreEditor: React.FC<{
   const [inGlobalVault, setInGlobalVault] = useState(idea.inGlobalVault);
   const [tagsText, setTagsText] = useState(idea.tags.join(', '));
   const [saving, setSaving] = useState(false);
+  const hasLinkedProjects = Object.keys(idea.projectLinks).length > 0;
+  const effectiveInGlobalVault = hasLinkedProjects ? inGlobalVault : true;
 
   const safeSourceUrl =
     idea.sourceUrl.startsWith('https://') || idea.sourceUrl.startsWith('http://') ? idea.sourceUrl : '';
@@ -892,8 +894,16 @@ const IdeaCoreEditor: React.FC<{
           <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Thẻ phân loại (cách nhau dấu phẩy)</span>
           <input type="text" className="rs-input" value={tagsText} onChange={(e) => setTagsText(e.target.value)} />
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', alignSelf: 'end', paddingBottom: 8 }}>
-          <input type="checkbox" checked={inGlobalVault} onChange={(e) => setInGlobalVault(e.target.checked)} />
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: hasLinkedProjects ? 'pointer' : 'not-allowed', alignSelf: 'end', paddingBottom: 8 }}
+          title={!hasLinkedProjects ? 'Ý tưởng chưa gắn vào Project nào phải giữ trong Kho ý tưởng chung (G5)' : undefined}
+        >
+          <input
+            type="checkbox"
+            checked={effectiveInGlobalVault}
+            disabled={!hasLinkedProjects}
+            onChange={(e) => setInGlobalVault(e.target.checked)}
+          />
           <span>Hiển thị trong Kho ý tưởng chung (G5)</span>
         </label>
       </div>
@@ -909,7 +919,7 @@ const IdeaCoreEditor: React.FC<{
               .split(',')
               .map((t) => t.trim())
               .filter(Boolean);
-            void onSave({ title: title.trim(), notes: notes.trim(), inGlobalVault, tags }).finally(() => {
+            void onSave({ title: title.trim(), notes: notes.trim(), inGlobalVault: effectiveInGlobalVault, tags }).finally(() => {
               setSaving(false);
             });
           }}

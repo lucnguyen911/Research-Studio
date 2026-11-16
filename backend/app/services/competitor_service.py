@@ -179,9 +179,11 @@ async def _fetch_and_persist_channel_bundle(
             status_code=404,
         )
 
+    units_spent = 1
     video_items: list[dict[str, Any]] = []
     uploads_id = channel_payload.get("uploads_playlist_id")
     if isinstance(uploads_id, str) and uploads_id:
+        units_spent += 1
         video_ids = await youtube_client.fetch_playlist_video_ids(
             uploads_id,
             max_results=COMPETITOR_VIDEOS_PER_REFRESH,
@@ -190,6 +192,7 @@ async def _fetch_and_persist_channel_bundle(
             retry_backoff_sec=retry_backoff_sec,
         )
         if video_ids:
+            units_spent += (len(video_ids) + 49) // 50
             video_items = await youtube_client.fetch_videos_by_ids(
                 video_ids,
                 is_auto_refresh=is_auto_refresh,
@@ -209,7 +212,7 @@ async def _fetch_and_persist_channel_bundle(
         return str(channel_payload["channel_id"])
 
     resolved_id = await run_db_sync(_save)
-    return {"channelId": resolved_id, "videosFetched": len(video_items)}
+    return {"channelId": resolved_id, "videosFetched": len(video_items), "unitsSpent": units_spent}
 
 
 async def add_competitor_to_project(
@@ -420,6 +423,15 @@ def _mark_project_channel_error(project_id: str, channel_id: str) -> None:
         conn.execute(
             "UPDATE project_channels SET status = 'error' WHERE project_id = ? AND channel_id = ?",
             (project_id, channel_id),
+        )
+
+
+def mark_channel_error_globally(channel_id: str) -> None:
+    """Isolate an unavailable/deleted channel across all active project links so scheduler stops polling it."""
+    with write_db() as conn:
+        conn.execute(
+            "UPDATE project_channels SET status = 'error' WHERE channel_id = ? AND status = 'active'",
+            (channel_id,),
         )
 
 

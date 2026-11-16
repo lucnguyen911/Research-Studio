@@ -29,6 +29,7 @@ class FreeSearchRequest(BaseModel):
     orderBy: Literal["relevance", "date", "viewCount", "rating"] = "relevance"
     maxResults: int = Field(default=SEARCH_MAX_RESULTS_PER_CALL, ge=1, le=50)
     pageToken: str | None = Field(default=None, max_length=128)
+    appendSessionId: str | None = Field(default=None, max_length=64)
 
 
 class ManualFormatRequest(BaseModel):
@@ -87,6 +88,7 @@ async def execute_free_search(payload: FreeSearchRequest) -> dict[str, object]:
         order_by=payload.orderBy,
         max_results=payload.maxResults,
         page_token=payload.pageToken,
+        append_session_id=payload.appendSessionId,
     )
 
 

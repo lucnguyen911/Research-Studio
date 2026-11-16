@@ -66,6 +66,16 @@ def close_logging_handlers() -> None:
             handler.close()
 
 
+def _attach_filter_once(handler: logging.Handler, redaction_filter: LogRedactionFilter) -> None:
+    if not any(isinstance(existing, LogRedactionFilter) for existing in handler.filters):
+        handler.addFilter(redaction_filter)
+
+
+def _attach_logger_filter_once(target_logger: logging.Logger, redaction_filter: LogRedactionFilter) -> None:
+    if not any(isinstance(existing, LogRedactionFilter) for existing in target_logger.filters):
+        target_logger.addFilter(redaction_filter)
+
+
 def configure_logging(data_dir: Path | None = None) -> logging.Logger:
     """Configure rotating file + console logging with mandatory secret redaction."""
     dirs = ensure_runtime_dirs(data_dir)
@@ -96,4 +106,14 @@ def configure_logging(data_dir: Path | None = None) -> logging.Logger:
 
     logger.addHandler(file_handler)
     logger.addHandler(stream_handler)
+
+    for third_party_name in ("httpx", "httpcore"):
+        third_party_logger = logging.getLogger(third_party_name)
+        third_party_logger.setLevel(logging.WARNING)
+        _attach_logger_filter_once(third_party_logger, redaction_filter)
+
+    for infra_logger in (logging.getLogger(), logging.getLogger("uvicorn"), logging.getLogger("uvicorn.error")):
+        for handler in infra_logger.handlers:
+            _attach_filter_once(handler, redaction_filter)
+
     return logger

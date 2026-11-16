@@ -474,6 +474,7 @@ export const TrendDiscoveryScreen: React.FC = () => {
           pushToast('success', 'Đã hủy tác vụ làm mới Khám phá xu hướng.');
           return;
         }
+        void syncQuotaStatus();
         pushToast('error', err instanceof ApiClientError ? err.message : 'Không thể làm mới Khám phá xu hướng.');
       })
       .finally(() => {
@@ -716,6 +717,7 @@ export const FreeResearchScreen: React.FC = () => {
           pushToast('success', 'Đã hủy lệnh tìm kiếm.');
           return;
         }
+        void syncQuotaStatus();
         pushToast('error', err instanceof ApiClientError ? err.message : 'Tìm kiếm YouTube thất bại.');
       })
       .finally(() => {
@@ -745,6 +747,7 @@ export const FreeResearchScreen: React.FC = () => {
         orderBy: sessionOrder,
         maxResults: 25,
         pageToken: nextPageToken,
+        appendSessionId: activeSession.id,
       },
       controller.signal,
     )
@@ -753,27 +756,24 @@ export const FreeResearchScreen: React.FC = () => {
         const mapped = res.videos.map(mapYoutubeVideoDtoToItem);
         registerVideosInMemory(mapped);
         if (res.session.objectType === 'channel') {
-          setResultChannels((prev) => {
-            const seen = new Set(prev.map((c) => c.channelId));
-            return [...prev, ...(res.channels ?? []).filter((c) => !seen.has(c.channelId))];
-          });
+          setResultChannels(res.channels ?? []);
         } else {
-          setResultVideos((prev) => {
-            const seen = new Set(prev.map((v) => v.id));
-            return [...prev, ...mapped.filter((v) => !seen.has(v.id))];
-          });
+          setResultVideos(mapped);
         }
         setActiveSession(res.session);
         setNextPageToken(res.nextPageToken ?? null);
         setSessions((prev) => [res.session, ...prev.filter((s) => s.id !== res.session.id)]);
         void syncQuotaStatus();
-        const addedCount = res.session.objectType === 'channel' ? (res.channels?.length ?? 0) : mapped.length;
-        pushToast('success', `Đã tải thêm ${addedCount} kết quả từ trang kế tiếp (1 Search + 1 General API).`);
+        const totalCount = res.session.objectType === 'channel' ? (res.channels?.length ?? 0) : mapped.length;
+        pushToast('success', `Đã tải thêm trang kế tiếp (tổng ${totalCount} kết quả · 1 Search + 1 General API).`);
       })
       .catch((err) => {
-        if (!isAbortError(err)) {
-          pushToast('error', err instanceof ApiClientError ? err.message : 'Tải trang kế tiếp thất bại.');
+        if (isAbortError(err)) {
+          pushToast('success', 'Đã hủy tải trang kế tiếp.');
+          return;
         }
+        void syncQuotaStatus();
+        pushToast('error', err instanceof ApiClientError ? err.message : 'Tải trang kế tiếp thất bại.');
       })
       .finally(() => {
         if (!controller.signal.aborted) {

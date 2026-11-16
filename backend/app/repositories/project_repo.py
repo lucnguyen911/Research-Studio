@@ -247,28 +247,32 @@ def delete_project_safely(project_id: str, confirm_name: str) -> dict[str, Any]:
         )
 
     dirs = ensure_runtime_dirs()
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")
     slug = safe_project_slug(actual_name, project_id)
     recovery_filename = f"project_recovery_{stamp}_{slug}.json"
     recovery_path = resolve_safe_child_path(dirs["backups"], recovery_filename)
     recovery_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    with write_db() as conn:
-        linked_idea_ids = [
-            r["idea_id"]
-            for r in conn.execute("SELECT idea_id FROM project_ideas WHERE project_id = ?", (project_id,)).fetchall()
-        ]
-        conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
-        for idea_id in linked_idea_ids:
-            remaining = conn.execute(
-                "SELECT COUNT(*) FROM project_ideas WHERE idea_id = ?",
-                (idea_id,),
-            ).fetchone()[0]
-            if remaining == 0:
-                conn.execute(
-                    "DELETE FROM ideas WHERE id = ? AND in_global_vault = 0",
+    try:
+        with write_db() as conn:
+            linked_idea_ids = [
+                r["idea_id"]
+                for r in conn.execute("SELECT idea_id FROM project_ideas WHERE project_id = ?", (project_id,)).fetchall()
+            ]
+            conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+            for idea_id in linked_idea_ids:
+                remaining = conn.execute(
+                    "SELECT COUNT(*) FROM project_ideas WHERE idea_id = ?",
                     (idea_id,),
-                )
+                ).fetchone()[0]
+                if remaining == 0:
+                    conn.execute(
+                        "DELETE FROM ideas WHERE id = ? AND in_global_vault = 0",
+                        (idea_id,),
+                    )
+    except BaseException:
+        recovery_path.unlink(missing_ok=True)
+        raise
 
     return {
         "deletedProjectId": project_id,

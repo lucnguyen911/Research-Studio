@@ -93,6 +93,9 @@ def create_project_keyword(
     kw_id = f"kw-{uuid.uuid4().hex[:10]}"
 
     with write_db() as conn:
+        proj = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if proj is None:
+            raise AppError("PROJECT_NOT_FOUND", "Không tìm thấy Project yêu cầu.", status_code=404)
         existing = conn.execute(
             "SELECT id, priority, notes FROM project_keywords WHERE project_id = ? AND keyword = ? COLLATE NOCASE",
             (project_id, clean_kw),
@@ -124,6 +127,9 @@ def update_project_keyword(
     notes: str | None = None,
 ) -> dict[str, Any]:
     with write_db() as conn:
+        proj = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if proj is None:
+            raise AppError("PROJECT_NOT_FOUND", "Không tìm thấy Project yêu cầu.", status_code=404)
         existing = conn.execute(
             "SELECT id, priority, notes FROM project_keywords WHERE project_id = ? AND id = ?",
             (project_id, keyword_id),

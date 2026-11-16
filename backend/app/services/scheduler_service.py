@@ -155,6 +155,7 @@ class LifespanScheduler:
         self.purge_interval_sec = purge_interval_sec
         self.refresh_interval_sec = refresh_interval_sec
         self._running = False
+        self._tick_lock = asyncio.Lock()
         self._purge_task: asyncio.Task[None] | None = None
         self._refresh_task: asyncio.Task[None] | None = None
         self.purge_ticks = 0
@@ -185,6 +186,33 @@ class LifespanScheduler:
         retry_backoff_sec: float = 0.15,
     ) -> dict[str, Any]:
         """Execute one controlled auto-refresh cycle obeying priority queue and quota caps."""
+        if self._tick_lock.locked():
+            return {
+                "executed": False,
+                "reason": "tick_already_running",
+                "rssRefreshed": 0,
+                "youtubeUnitsSpent": 0,
+                "searchQueriesSpent": 0,
+            }
+
+        async with self._tick_lock:
+            return await self._run_auto_refresh_tick_locked(
+                now_utc=now_utc,
+                yt_transport=yt_transport,
+                rss_transport=rss_transport,
+                rss_resolver=rss_resolver,
+                retry_backoff_sec=retry_backoff_sec,
+            )
+
+    async def _run_auto_refresh_tick_locked(
+        self,
+        *,
+        now_utc: datetime | None = None,
+        yt_transport: httpx.AsyncBaseTransport | None = None,
+        rss_transport: httpx.AsyncBaseTransport | None = None,
+        rss_resolver: DnsResolver | None = None,
+        retry_backoff_sec: float = 0.15,
+    ) -> dict[str, Any]:
         from app.services import competitor_service, rss_service
 
         utc_now = _normalize_utc(now_utc)
@@ -266,13 +294,21 @@ class LifespanScheduler:
                         retry_backoff_sec=retry_backoff_sec,
                     )
                     units_spent += 1
+                    returned_ids = {item["video_id"] for item in fetched}
+                    missing_ids = [vid for vid in chunk if vid not in returned_ids]
 
-                    def _save_batch(items: list[dict[str, Any]]) -> None:
+                    def _save_batch(items: list[dict[str, Any]], unavailable_ids: list[str]) -> None:
                         with write_db() as conn:
                             for item in items:
                                 youtube_repo.upsert_video_and_snapshot(conn=conn, now_utc=utc_now, **item)
+                            if unavailable_ids:
+                                retention_service.tombstone_unavailable_videos_in_tx(
+                                    conn,
+                                    unavailable_ids,
+                                    now_iso=utc_now.isoformat(),
+                                )
 
-                    await run_db_sync(_save_batch, fetched)
+                    await run_db_sync(_save_batch, fetched, missing_ids)
                     idea_videos_renewed += len(fetched)
                 except AppError as exc:
                     youtube_skipped_reason = exc.code
@@ -291,16 +327,22 @@ class LifespanScheduler:
                     if units_spent + 3 > remaining_auto_budget:
                         break
                     try:
-                        await competitor_service.refresh_competitor_channel(
+                        bundle = await competitor_service.refresh_competitor_channel(
                             cid,
                             is_auto_refresh=True,
                             transport=yt_transport,
                             retry_backoff_sec=retry_backoff_sec,
                             now_utc=utc_now,
                         )
-                        units_spent += 3
+                        if bundle.get("skippedInFlight"):
+                            continue
+                        units_spent += int(bundle.get("unitsSpent", 3))
                         channels_refreshed += 1
                     except AppError as exc:
+                        if exc.code == "CHANNEL_NOT_FOUND_ON_YOUTUBE":
+                            units_spent += 1
+                            await run_db_sync(competitor_service.mark_channel_error_globally, cid)
+                            continue
                         if exc.code in (
                             "AUTO_REFRESH_QUOTA_CAP_REACHED",
                             "QUOTA_GENERAL_EXHAUSTED",

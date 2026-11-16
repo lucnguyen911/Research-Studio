@@ -365,6 +365,7 @@ export async function runFreeSearchApi(
     orderBy: 'relevance' | 'date' | 'viewCount' | 'rating';
     maxResults?: number;
     pageToken?: string | null;
+    appendSessionId?: string | null;
   },
   signal?: AbortSignal,
 ): Promise<FreeSearchResponseDto> {

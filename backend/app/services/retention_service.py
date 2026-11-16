@@ -15,6 +15,92 @@ def _normalize_utc(now_utc: datetime | None) -> str:
     return now_utc.astimezone(timezone.utc).isoformat()
 
 
+_VIDEO_UNREFERENCED_GUARD_SQL = """
+    video_id NOT IN (SELECT video_id FROM project_videos)
+    AND video_id NOT IN (SELECT video_id FROM user_video_format_labels)
+    AND video_id NOT IN (
+        SELECT linked_video_id FROM ideas WHERE linked_video_id IS NOT NULL
+    )
+"""
+
+_VIDEO_TOMBSTONE_SET_SQL = """
+    title = NULL,
+    description = NULL,
+    channel_title = NULL,
+    published_at = NULL,
+    thumbnail_url = NULL,
+    duration_seconds = NULL,
+    tags_json = NULL,
+    view_count = NULL,
+    like_count = NULL,
+    comment_count = NULL,
+    is_live_streaming = NULL,
+    source_format_status = 'unknown',
+    format_hint = NULL,
+    format_hint_confidence = NULL,
+    format_hint_basis = NULL,
+    api_fetched_at = NULL,
+    api_expires_at = NULL,
+    api_purged_at = :now_iso,
+    channel_id = CASE
+        WHEN channel_id IS NOT NULL
+             AND channel_id NOT IN (SELECT channel_id FROM project_channels)
+             AND channel_id NOT IN (
+                 SELECT linked_channel_id FROM ideas WHERE linked_channel_id IS NOT NULL
+             )
+        THEN NULL
+        ELSE channel_id
+    END
+"""
+
+
+def tombstone_unavailable_videos_in_tx(
+    conn: sqlite3.Connection,
+    video_ids: list[str],
+    *,
+    now_iso: str,
+) -> int:
+    """Tombstone YouTube API metadata for video IDs confirmed missing/deleted/private by videos.list."""
+    clean_ids = list(dict.fromkeys(vid.strip() for vid in video_ids if vid and vid.strip()))
+    if not clean_ids:
+        return 0
+    placeholders = ",".join("?" for _ in clean_ids)
+    conn.execute(f"DELETE FROM youtube_video_snapshots WHERE video_id IN ({placeholders})", clean_ids)
+    cur_del = conn.execute(
+        f"""
+        DELETE FROM youtube_videos
+        WHERE video_id IN ({placeholders})
+          AND {_VIDEO_UNREFERENCED_GUARD_SQL}
+        """,
+        clean_ids,
+    )
+    tomb_params: dict[str, str] = {"now_iso": now_iso}
+    named_placeholders = []
+    for idx, vid in enumerate(clean_ids):
+        key = f"vid_{idx}"
+        tomb_params[key] = vid
+        named_placeholders.append(f":{key}")
+    in_clause = ",".join(named_placeholders)
+    cur_tomb = conn.execute(
+        f"""
+        UPDATE youtube_videos
+        SET {_VIDEO_TOMBSTONE_SET_SQL}
+        WHERE video_id IN ({in_clause})
+        """,
+        tomb_params,
+    )
+    conn.execute(
+        f"""
+        UPDATE ideas
+        SET source_title_snapshot = ''
+        WHERE source_type = 'youtube_video'
+          AND linked_video_id IN ({placeholders})
+        """,
+        clean_ids,
+    )
+    return max(0, cur_del.rowcount) + max(0, cur_tomb.rowcount)
+
+
 def _tombstone_expired_youtube_data_in_tx(
     conn: sqlite3.Connection,
     *,
@@ -44,11 +130,7 @@ def _tombstone_expired_youtube_data_in_tx(
         f"""
         DELETE FROM youtube_videos
         WHERE {video_expiry_predicate}
-          AND video_id NOT IN (SELECT video_id FROM project_videos)
-          AND video_id NOT IN (SELECT video_id FROM user_video_format_labels)
-          AND video_id NOT IN (
-              SELECT linked_video_id FROM ideas WHERE linked_video_id IS NOT NULL
-          )
+          AND {_VIDEO_UNREFERENCED_GUARD_SQL}
         """,
         {"now_iso": now_iso},
     )
@@ -56,33 +138,7 @@ def _tombstone_expired_youtube_data_in_tx(
     cur_vid_tomb = conn.execute(
         f"""
         UPDATE youtube_videos
-        SET title = NULL,
-            description = NULL,
-            channel_title = NULL,
-            published_at = NULL,
-            thumbnail_url = NULL,
-            duration_seconds = NULL,
-            tags_json = NULL,
-            view_count = NULL,
-            like_count = NULL,
-            comment_count = NULL,
-            is_live_streaming = NULL,
-            source_format_status = 'unknown',
-            format_hint = NULL,
-            format_hint_confidence = NULL,
-            format_hint_basis = NULL,
-            api_fetched_at = NULL,
-            api_expires_at = NULL,
-            api_purged_at = :now_iso,
-            channel_id = CASE
-                WHEN channel_id IS NOT NULL
-                     AND channel_id NOT IN (SELECT channel_id FROM project_channels)
-                     AND channel_id NOT IN (
-                         SELECT linked_channel_id FROM ideas WHERE linked_channel_id IS NOT NULL
-                     )
-                THEN NULL
-                ELSE channel_id
-            END
+        SET {_VIDEO_TOMBSTONE_SET_SQL}
         WHERE {video_expiry_predicate}
         """,
         {"now_iso": now_iso},
@@ -132,18 +188,27 @@ def _tombstone_expired_youtube_data_in_tx(
         {"now_iso": now_iso},
     )
 
-    conn.execute(
-        """
-        UPDATE ideas
-        SET source_title_snapshot = ''
-        WHERE source_type = 'youtube_video'
-          AND linked_video_id IS NOT NULL
-          AND linked_video_id IN (
-              SELECT video_id FROM youtube_videos WHERE api_purged_at = :now_iso
-          )
-        """,
-        {"now_iso": now_iso},
-    )
+    if purge_all:
+        conn.execute(
+            """
+            UPDATE ideas
+            SET source_title_snapshot = ''
+            WHERE source_type = 'youtube_video'
+            """
+        )
+    else:
+        conn.execute(
+            """
+            UPDATE ideas
+            SET source_title_snapshot = ''
+            WHERE source_type = 'youtube_video'
+              AND linked_video_id IS NOT NULL
+              AND linked_video_id IN (
+                  SELECT video_id FROM youtube_videos WHERE api_purged_at = :now_iso
+              )
+            """,
+            {"now_iso": now_iso},
+        )
 
     return {
         "snapshotsDeleted": max(0, cur_snap.rowcount),

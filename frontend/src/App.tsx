@@ -52,15 +52,15 @@ const ScreenOutlet: React.FC = () => {
     case 'global-ideas':
       return <GlobalIdeaVaultScreen />;
     case 'project-overview':
-      return <ProjectOverviewScreen />;
+      return <ProjectOverviewScreen key={currentEntry.projectId ?? 'no-project'} />;
     case 'project-hot-topics-stage2':
       return <StageTwoScreen screenId="project-hot-topics-stage2" />;
     case 'project-keywords':
-      return <KeywordResearchScreen />;
+      return <KeywordResearchScreen key={currentEntry.projectId ?? 'no-project'} />;
     case 'project-breakout':
-      return <BreakoutVideosScreen />;
+      return <BreakoutVideosScreen key={currentEntry.projectId ?? 'no-project'} />;
     case 'project-competitors':
-      return <CompetitorsScreen />;
+      return <CompetitorsScreen key={currentEntry.projectId ?? 'no-project'} />;
     case 'project-evergreen-stage2':
       return <StageTwoScreen screenId="project-evergreen-stage2" />;
     case 'project-opportunities-stage2':
@@ -68,7 +68,7 @@ const ScreenOutlet: React.FC = () => {
     case 'project-ai-stage2':
       return <StageTwoScreen screenId="project-ai-stage2" />;
     case 'project-ideas':
-      return <ProjectIdeasScreen />;
+      return <ProjectIdeasScreen key={currentEntry.projectId ?? 'no-project'} />;
     case 'project-settings':
       return <ProjectSettingsScreen />;
     case 'channel-detail':

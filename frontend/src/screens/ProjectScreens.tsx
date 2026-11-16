@@ -132,18 +132,32 @@ export const ProjectOverviewScreen: React.FC = () => {
         if (controller.signal.aborted) return;
         setOvState({ key: reqKey, data: res.overview, error: null });
         void syncQuotaStatus();
-        pushToast(
-          'success',
-          `Đã đồng bộ Project (RSS: ${res.rssRefreshedCount} nguồn${
-            res.competitorSummary ? `, Đối thủ: ${res.competitorSummary.okCount}/${res.competitorSummary.refreshedCount} kênh` : ''
-          }).`,
-        );
+        const rssOk = res.rssOkCount ?? res.rssRefreshedCount;
+        const rssErr = res.rssErrorCount ?? 0;
+        const comp = res.competitorSummary;
+        const compErr = comp?.errorCount ?? 0;
+        if (rssErr > 0 || compErr > 0) {
+          pushToast(
+            'error',
+            `Đồng bộ Project hoàn tất với lỗi cô lập (RSS: ${rssOk}/${res.rssRefreshedCount} nguồn ok${
+              comp ? `, Đối thủ: ${comp.okCount}/${comp.refreshedCount} kênh ok` : ''
+            }).`,
+          );
+        } else {
+          pushToast(
+            'success',
+            `Đã đồng bộ Project (RSS: ${rssOk} nguồn${
+              comp ? `, Đối thủ: ${comp.okCount}/${comp.refreshedCount} kênh` : ''
+            }).`,
+          );
+        }
       })
       .catch((err) => {
         if (isAbortError(err)) {
           pushToast('success', 'Đã hủy lệnh làm mới Project.');
           return;
         }
+        void syncQuotaStatus();
         pushToast('error', err instanceof ApiClientError ? err.message : 'Không thể làm mới Project.');
       })
       .finally(() => {
@@ -460,6 +474,7 @@ export const CompetitorsScreen: React.FC = () => {
           pushToast('success', 'Đã hủy lệnh làm mới kênh đối thủ.');
           return;
         }
+        void syncQuotaStatus();
         pushToast('error', err instanceof ApiClientError ? err.message : 'Không làm mới được kênh đối thủ.');
       })
       .finally(() => {
@@ -487,6 +502,7 @@ export const CompetitorsScreen: React.FC = () => {
           pushToast('success', 'Đã hủy làm mới kênh đối thủ.');
           return;
         }
+        void syncQuotaStatus();
         pushToast('error', err instanceof ApiClientError ? err.message : 'Kênh đối thủ cập nhật thất bại.');
         setReloadNonce((n) => n + 1);
       })
@@ -1070,6 +1086,8 @@ export const KeywordResearchScreen: React.FC = () => {
           pushToast('success', 'Đã hủy tác vụ quét từ khóa.');
           return;
         }
+        void syncQuotaStatus();
+        setReloadNonce((n) => n + 1);
         pushToast('error', err instanceof ApiClientError ? err.message : 'Quét từ khóa YouTube thất bại.');
       })
       .finally(() => {

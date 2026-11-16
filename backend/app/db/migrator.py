@@ -11,10 +11,21 @@ DEFAULT_MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
 
 def split_sql_statements(sql_text: str) -> list[str]:
-    """Split a SQL migration script into standalone statements runnable inside BEGIN IMMEDIATE."""
-    cleaned_lines = [line for line in sql_text.splitlines() if not line.lstrip().startswith("--")]
-    cleaned_sql = "\n".join(cleaned_lines)
-    return [stmt.strip() for stmt in cleaned_sql.split(";") if stmt.strip()]
+    """Split a SQL migration script safely across triggers/literals inside BEGIN IMMEDIATE."""
+    statements: list[str] = []
+    buffer: list[str] = []
+    for raw_line in sql_text.splitlines():
+        if not buffer and (not raw_line.strip() or raw_line.lstrip().startswith("--")):
+            continue
+        buffer.append(raw_line)
+        candidate = "\n".join(buffer).strip()
+        if candidate and sqlite3.complete_statement(candidate):
+            statements.append(candidate)
+            buffer.clear()
+    trailing = "\n".join(buffer).strip()
+    if trailing and not all(not ln.strip() or ln.lstrip().startswith("--") for ln in buffer):
+        statements.append(trailing)
+    return statements
 
 
 def create_sqlite_backup(
@@ -49,8 +60,7 @@ def run_migrations(
 ) -> list[str]:
     """Apply forward-only SQLite migrations atomically with mandatory pre-upgrade backups."""
     resolved_db = resolve_db_path(db_path)
-    dirs = ensure_runtime_dirs()
-    resolved_backups = backups_dir or dirs["backups"]
+    resolved_backups = backups_dir if backups_dir is not None else ensure_runtime_dirs()["backups"]
     mig_dir = migrations_dir or DEFAULT_MIGRATIONS_DIR
 
     conn = open_connection(resolved_db)

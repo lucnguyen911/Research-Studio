@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import re
 from typing import Any
 
+import anyio
 import httpx
 
 from app.clients.rss_client import DnsResolver, fetch_and_parse_feed, validate_public_feed_url
@@ -60,7 +61,7 @@ async def add_rss_feed(
     resolver: DnsResolver | None = None,
 ) -> dict[str, Any]:
     """Validate URL for SSRF before inserting feed record into SQLite."""
-    safe_url = validate_public_feed_url(url, resolver=resolver)
+    safe_url = await anyio.to_thread.run_sync(lambda: validate_public_feed_url(url, resolver=resolver))
     return await run_db_sync(rss_repo.create_feed, name=name, url=safe_url, group_tag=group_tag)
 
 

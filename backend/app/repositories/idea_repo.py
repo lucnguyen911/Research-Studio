@@ -327,6 +327,17 @@ def update_idea_core(
             raise AppError("IDEA_TITLE_EMPTY", "Tiêu đề Ý tưởng không được để trống.", status_code=400)
         next_notes = str(patch.get("notes", current["notes"])).strip()
         next_vault = 1 if patch.get("inGlobalVault", bool(current["in_global_vault"])) else 0
+        if next_vault == 0:
+            remaining_links = conn.execute(
+                "SELECT COUNT(*) FROM project_ideas WHERE idea_id = ?",
+                (idea_id,),
+            ).fetchone()[0]
+            if remaining_links == 0:
+                raise AppError(
+                    code="IDEA_MUST_HAVE_LOCATION",
+                    message="Ý tưởng chưa gắn vào Project nào nên phải giữ trong Kho ý tưởng chung (G5).",
+                    status_code=400,
+                )
         if "tags" in patch:
             tags_val = json.dumps(patch["tags"], ensure_ascii=False)
         else:
