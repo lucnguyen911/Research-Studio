@@ -357,14 +357,14 @@ export const LegalConsentModal: React.FC = () => {
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             <li>
               Sử dụng tính năng YouTube đồng nghĩa bạn đồng ý chịu sự ràng buộc của{' '}
-              <a href={systemSettings.legalLinks.youtubeTosUrl} target="_blank" rel="noreferrer">
+              <a href={systemSettings.legalLinks.youtubeTosUrl} target="_blank" rel="noopener noreferrer">
                 YouTube Terms of Service
               </a>
               .
             </li>
             <li>
               Xem thêm{' '}
-              <a href={systemSettings.legalLinks.googlePrivacyUrl} target="_blank" rel="noreferrer">
+              <a href={systemSettings.legalLinks.googlePrivacyUrl} target="_blank" rel="noopener noreferrer">
                 Google Privacy Policy
               </a>
               .

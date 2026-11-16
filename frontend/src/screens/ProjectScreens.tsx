@@ -1586,7 +1586,7 @@ export const ProjectIdeasScreen: React.FC = () => {
                       {safePublishedUrl && (
                         <div style={{ fontSize: '12px', marginTop: 4 }}>
                           Video đã xuất bản:{' '}
-                          <a href={safePublishedUrl} target="_blank" rel="noreferrer">
+                          <a href={safePublishedUrl} target="_blank" rel="noopener noreferrer">
                             {safePublishedUrl}
                           </a>
                         </div>

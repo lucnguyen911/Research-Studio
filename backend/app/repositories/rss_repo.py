@@ -13,6 +13,10 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _escape_like(term: str) -> str:
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _row_to_feed(row: sqlite3.Row, article_count: int = 0) -> dict[str, Any]:
     return {
         "id": row["id"],
@@ -218,8 +222,8 @@ def list_articles(
     if only_bookmarked:
         clauses.append("a.bookmarked = 1")
     if search.strip():
-        like = f"%{search.strip()}%"
-        clauses.append("(a.title LIKE ? OR a.summary_text LIKE ?)")
+        like = f"%{_escape_like(search.strip())}%"
+        clauses.append("(a.title LIKE ? ESCAPE '\\' OR a.summary_text LIKE ? ESCAPE '\\')")
         params.extend([like, like])
 
     where_sql = " AND ".join(clauses)

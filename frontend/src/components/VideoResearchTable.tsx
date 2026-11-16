@@ -308,11 +308,12 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                     <td style={{ minWidth: 250 }}>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                         <div className="rs-thumb" aria-hidden="true" style={{ width: 92, height: 52, position: 'relative' }}>
-                          {v.thumbnailUrl ? (
+                          {v.thumbnailUrl && v.thumbnailUrl.startsWith('https://') ? (
                             <img
                               src={v.thumbnailUrl}
                               alt=""
                               loading="lazy"
+                              referrerPolicy="no-referrer"
                               style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
                             />
                           ) : (
@@ -343,9 +344,9 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                             </button>
                             <span>· Đăng {v.publishedAt}</span>
                             <a
-                              href={`https://www.youtube.com/watch?v=${v.id}`}
+                              href={`https://www.youtube.com/watch?v=${encodeURIComponent(v.id)}`}
                               target="_blank"
-                              rel="noreferrer"
+                              rel="noopener noreferrer"
                               style={{ color: 'var(--rs-accent-text)', textDecoration: 'none', fontWeight: 600 }}
                             >
                               YouTube ↗

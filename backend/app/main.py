@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
-from app.core.config import ensure_runtime_dirs, get_allowed_origins
+from app.core.config import (
+    DEFAULT_BIND_HOST,
+    ensure_runtime_dirs,
+    get_allowed_origins,
+    validate_loopback_bind_host,
+)
 from app.core.errors import AppError, error_json_response, register_error_handlers
 from app.core.logging_setup import close_logging_handlers, configure_logging
 from app.core.security import CSRF_HEADER_NAME, verify_local_csrf_and_origin
@@ -50,8 +57,18 @@ def create_app() -> FastAPI:
         allow_origins=get_allowed_origins(),
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", CSRF_HEADER_NAME],
+        allow_headers=["Content-Type", "Accept", CSRF_HEADER_NAME],
     )
+
+    def _apply_security_headers(request: Request, response: Response) -> Response:
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("Cross-Origin-Resource-Policy", "same-site")
+        if request.url.path.startswith("/api/v1"):
+            response.headers.setdefault("Cache-Control", "no-store")
+            response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+        return response
 
     @application.middleware("http")
     async def csrf_and_origin_middleware(
@@ -62,13 +79,15 @@ def create_app() -> FastAPI:
         try:
             verify_local_csrf_and_origin(request, allowed)
         except AppError as exc:
-            return error_json_response(
+            resp = error_json_response(
                 code=exc.code,
                 message=exc.message,
                 status_code=exc.status_code,
                 details=exc.details,
             )
-        return await call_next(request)
+            return _apply_security_headers(request, resp)
+        response = await call_next(request)
+        return _apply_security_headers(request, response)
 
     application.include_router(system_router.router)
     application.include_router(projects_router.router)
@@ -98,4 +117,10 @@ async def health_check() -> dict[str, str]:
         "service": "research-studio-api",
         "environment": "local",
     }
+
+
+if __name__ == "__main__":
+    bind_host = validate_loopback_bind_host(os.getenv("RESEARCH_STUDIO_HOST", DEFAULT_BIND_HOST))
+    bind_port = int(os.getenv("RESEARCH_STUDIO_PORT", "8000"))
+    uvicorn.run("app.main:app", host=bind_host, port=bind_port, log_level="warning")
 

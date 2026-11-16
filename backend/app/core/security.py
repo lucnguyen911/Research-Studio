@@ -12,6 +12,7 @@ from app.core.errors import AppError
 CSRF_HEADER_NAME = "X-Research-Studio-Client"
 CSRF_HEADER_VALUE = "local-web"
 MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+_LOOPBACK_HEADER_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]"})
 
 _CRYPTPROTECT_UI_FORBIDDEN = 0x01
 
@@ -126,10 +127,52 @@ def mask_api_key(raw_key: str) -> str:
     return f"{cleaned[:4]}...{cleaned[-4:]}"
 
 
-def verify_local_csrf_and_origin(request: Request, allowed_origins: set[str]) -> None:
-    """Block drive-by localhost CSRF on mutating /api/v1/* requests."""
-    if request.method.upper() not in MUTATING_METHODS:
+def _extract_host_name(raw_host: str) -> str:
+    """Parse an HTTP Host header value into a lowercase hostname without port."""
+    cleaned = raw_host.strip()
+    if not cleaned or any(ch.isspace() or ch in ",/@" for ch in cleaned):
+        return ""
+    if cleaned.startswith("["):
+        end_idx = cleaned.find("]")
+        if end_idx <= 1:
+            return ""
+        host_part = cleaned[: end_idx + 1].lower()
+        rest = cleaned[end_idx + 1 :]
+        if rest:
+            if not rest.startswith(":") or not rest[1:].isdigit():
+                return ""
+        return host_part
+    if ":" in cleaned:
+        host_part, port_part = cleaned.rsplit(":", 1)
+        if not port_part.isdigit():
+            return ""
+        return host_part.lower()
+    return cleaned.lower()
+
+
+def _verify_loopback_host(request: Request) -> None:
+    """Reject DNS-rebound Host headers across all endpoints (GET, docs, export, and mutations)."""
+    raw_host = request.headers.get("host", "")
+    host_name = _extract_host_name(raw_host)
+    is_in_memory_test_client = (
+        host_name == "testserver"
+        and request.client is not None
+        and request.client.host == "testclient"
+    )
+    if host_name in _LOOPBACK_HEADER_HOSTS or is_in_memory_test_client:
         return
+    raise AppError(
+        code="HOST_NOT_ALLOWED",
+        message="Header Host không thuộc địa chỉ loopback cục bộ hợp lệ.",
+        status_code=403,
+        details={"host": raw_host[:120]},
+    )
+
+
+def verify_local_csrf_and_origin(request: Request, allowed_origins: set[str]) -> None:
+    """Block DNS rebinding, cross-site reads/triggers, and drive-by localhost CSRF."""
+    _verify_loopback_host(request)
+
     if not request.url.path.startswith("/api/v1"):
         return
 
@@ -142,11 +185,27 @@ def verify_local_csrf_and_origin(request: Request, allowed_origins: set[str]) ->
             details={"origin": origin},
         )
 
-    client_header = request.headers.get(CSRF_HEADER_NAME)
-    if client_header != CSRF_HEADER_VALUE:
+    sec_fetch_site = (request.headers.get("sec-fetch-site") or "").strip().lower()
+    if sec_fetch_site == "cross-site" and (origin is None or origin not in allowed_origins):
         raise AppError(
-            code="CSRF_HEADER_MISSING",
-            message="Thiếu header xác thực client cục bộ hợp lệ.",
+            code="CSRF_CROSS_SITE_BLOCKED",
+            message="Yêu cầu cross-site từ trang web bên ngoài bị chặn để bảo vệ dữ liệu cục bộ.",
             status_code=403,
-            details={"requiredHeader": CSRF_HEADER_NAME},
+            details={"secFetchSite": sec_fetch_site},
         )
+
+    is_mutating = request.method.upper() in MUTATING_METHODS
+    is_paid_refresh_get = (
+        request.method.upper() == "GET"
+        and request.url.path == "/api/v1/global/categories"
+        and request.query_params.get("refresh", "").strip().lower() in ("1", "true", "yes", "on")
+    )
+    if is_mutating or is_paid_refresh_get:
+        client_header = request.headers.get(CSRF_HEADER_NAME)
+        if client_header != CSRF_HEADER_VALUE:
+            raise AppError(
+                code="CSRF_HEADER_MISSING",
+                message="Thiếu header xác thực client cục bộ hợp lệ.",
+                status_code=403,
+                details={"requiredHeader": CSRF_HEADER_NAME},
+            )

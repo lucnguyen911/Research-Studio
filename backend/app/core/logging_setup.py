@@ -13,11 +13,12 @@ LOG_BACKUP_COUNT = 3
 
 _SENSITIVE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(key=)[^&\s\"']+", re.IGNORECASE), r"\1[REDACTED]"),
+    (re.compile(r"(key%3D)[^&\s\"']+", re.IGNORECASE), r"\1[REDACTED]"),
     (re.compile(r"(Bearer\s+)[A-Za-z0-9._\-~+/=]+", re.IGNORECASE), r"\1[REDACTED]"),
     (re.compile(r"\bAIza[0-9A-Za-z\-_]{8,}"), "AIza[REDACTED]"),
     (
         re.compile(
-            r"([\"']?(?:api_key|apiKey|authorization|x-goog-api-key)[\"']?\s*[:=]\s*[\"']?)([^\"'\s,}]+)",
+            r"([\"']?(?:api_key|apiKey|rawApiKey|youtube_api_key|authorization|x-goog-api-key)[\"']?\s*[:=]\s*[\"']?)([^\"'\s,}]+)",
             re.IGNORECASE,
         ),
         r"\1[REDACTED]",
@@ -112,7 +113,12 @@ def configure_logging(data_dir: Path | None = None) -> logging.Logger:
         third_party_logger.setLevel(logging.WARNING)
         _attach_logger_filter_once(third_party_logger, redaction_filter)
 
-    for infra_logger in (logging.getLogger(), logging.getLogger("uvicorn"), logging.getLogger("uvicorn.error")):
+    for infra_logger in (
+        logging.getLogger(),
+        logging.getLogger("uvicorn"),
+        logging.getLogger("uvicorn.error"),
+        logging.getLogger("uvicorn.access"),
+    ):
         for handler in infra_logger.handlers:
             _attach_filter_once(handler, redaction_filter)
 

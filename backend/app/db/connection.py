@@ -35,6 +35,7 @@ def open_connection(db_path: Path | None = None) -> sqlite3.Connection:
     conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS};")
     conn.execute("PRAGMA foreign_keys = ON;")
     conn.execute("PRAGMA synchronous = NORMAL;")
+    conn.execute("PRAGMA secure_delete = ON;")
     return conn
 
 

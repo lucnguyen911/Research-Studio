@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from app.clients import youtube_client
@@ -39,8 +39,8 @@ class ManualFormatRequest(BaseModel):
 @router.get("/global/categories")
 async def get_video_categories(
     refresh: bool = False,
-    regionCode: str = "VN",
-    language: str = "vi",
+    regionCode: str = Query(default="VN", max_length=8),
+    language: str = Query(default="vi", max_length=16),
 ) -> dict[str, object]:
     if refresh:
         items = await youtube_client.fetch_video_categories(region_code=regionCode, language=language)
@@ -49,7 +49,10 @@ async def get_video_categories(
 
 
 @router.get("/global/trends")
-async def read_cached_trends(regionCode: str = "VN", categoryId: str = "all") -> dict[str, object]:
+async def read_cached_trends(
+    regionCode: str = Query(default="VN", max_length=8),
+    categoryId: str = Query(default="all", max_length=32),
+) -> dict[str, object]:
     return await run_db_sync(
         discovery_service.get_cached_trends,
         region_code=regionCode,
@@ -93,7 +96,10 @@ async def execute_free_search(payload: FreeSearchRequest) -> dict[str, object]:
 
 
 @router.get("/youtube/videos/{video_id}")
-async def read_youtube_video_detail(video_id: str, projectId: str | None = None) -> dict[str, object]:
+async def read_youtube_video_detail(
+    video_id: str,
+    projectId: str | None = Query(default=None, max_length=64),
+) -> dict[str, object]:
     return await run_db_sync(discovery_service.get_video_detail, video_id, project_id=projectId)
 
 

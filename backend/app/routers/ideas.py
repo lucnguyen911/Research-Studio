@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from app.db.connection import run_db_sync
@@ -43,13 +43,13 @@ class UpsertProjectIdeaLinkRequest(BaseModel):
 
 @router.get("")
 async def get_ideas(
-    projectId: str | None = None,
+    projectId: str | None = Query(default=None, max_length=64),
     onlyGlobalVault: bool = False,
-    status: str | None = None,
-    priority: str | None = None,
-    sourceType: str | None = None,
-    linkState: str | None = None,
-    search: str = "",
+    status: str | None = Query(default=None, max_length=64),
+    priority: str | None = Query(default=None, max_length=64),
+    sourceType: str | None = Query(default=None, max_length=64),
+    linkState: str | None = Query(default=None, max_length=64),
+    search: str = Query(default="", max_length=200),
 ) -> dict[str, object]:
     items = await run_db_sync(
         idea_repo.list_ideas,

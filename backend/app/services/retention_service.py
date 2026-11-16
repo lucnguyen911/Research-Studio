@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import sqlite3
 
 from app.core.config import ensure_runtime_dirs
-from app.db.connection import read_db, write_db
+from app.db.connection import open_connection, write_db
 
 
 def _normalize_utc(now_utc: datetime | None) -> str:
@@ -243,8 +243,13 @@ def purge_all_youtube_api_data_by_user_request(*, now_utc: datetime | None = Non
     with write_db() as conn:
         counts = _tombstone_expired_youtube_data_in_tx(conn, now_iso=now_iso, purge_all=True)
 
-    with read_db() as checkpoint_conn:
-        checkpoint_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    checkpoint_conn = open_connection()
+    try:
+        checkpoint_conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+        checkpoint_conn.execute("VACUUM;")
+        checkpoint_conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+    finally:
+        checkpoint_conn.close()
 
     dirs = ensure_runtime_dirs()
     backups_removed = 0

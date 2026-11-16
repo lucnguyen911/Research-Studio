@@ -30,6 +30,10 @@ def _parse_tags(raw_json: str | None) -> list[str]:
     return []
 
 
+def _escape_like(term: str) -> str:
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _load_project_links_map(conn: sqlite3.Connection, idea_ids: list[str]) -> dict[str, dict[str, Any]]:
     if not idea_ids:
         return {}
@@ -136,23 +140,25 @@ def list_ideas(
         clauses.append("EXISTS (SELECT 1 FROM project_ideas pi WHERE pi.idea_id = i.id)")
 
     if search.strip():
-        like = f"%{search.strip()}%"
+        like = f"%{_escape_like(search.strip())}%"
         if project_id:
             clauses.append(
                 """
                 (
-                    i.title LIKE ? OR i.notes LIKE ?
+                    i.title LIKE ? ESCAPE '\\' OR i.notes LIKE ? ESCAPE '\\'
                     OR EXISTS (
                         SELECT 1 FROM project_ideas pi
                         WHERE pi.idea_id = i.id AND pi.project_id = ?
-                          AND (pi.project_angle LIKE ? OR pi.project_notes LIKE ?)
+                          AND (pi.project_angle LIKE ? ESCAPE '\\' OR pi.project_notes LIKE ? ESCAPE '\\')
                     )
                 )
                 """
             )
             params.extend([like, like, project_id, like, like])
         else:
-            clauses.append("(i.title LIKE ? OR i.notes LIKE ? OR i.source_title_snapshot LIKE ?)")
+            clauses.append(
+                "(i.title LIKE ? ESCAPE '\\' OR i.notes LIKE ? ESCAPE '\\' OR i.source_title_snapshot LIKE ? ESCAPE '\\')"
+            )
             params.extend([like, like, like])
 
     where_sql = " AND ".join(clauses)

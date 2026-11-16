@@ -29,7 +29,7 @@ class LegalConsentRequest(BaseModel):
 
 
 class SaveApiKeyRequest(BaseModel):
-    apiKey: str
+    apiKey: str = Field(min_length=1, max_length=256)
 
 
 @router.get("/settings")

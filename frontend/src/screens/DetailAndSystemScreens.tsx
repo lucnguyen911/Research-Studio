@@ -93,9 +93,10 @@ export const ChannelDetailScreen: React.FC = () => {
 
   const { channel, videos, linkedProjects } = state.detail;
   const videoItems = videos.map(mapYoutubeVideoDtoToItem);
-  const channelExternalUrl = channel.handle
-    ? `https://www.youtube.com/${channel.handle.startsWith('@') ? channel.handle : `@${channel.handle}`}`
-    : `https://www.youtube.com/channel/${channel.channelId}`;
+  const rawHandle = channel.handle ? (channel.handle.startsWith('@') ? channel.handle : `@${channel.handle}`) : '';
+  const channelExternalUrl = rawHandle
+    ? `https://www.youtube.com/${encodeURIComponent(rawHandle).replace(/^%40/, '@')}`
+    : `https://www.youtube.com/channel/${encodeURIComponent(channel.channelId)}`;
 
   return (
     <div className="rs-container">
@@ -129,7 +130,7 @@ export const ChannelDetailScreen: React.FC = () => {
               + Theo dõi đối thủ trong {activeProject.name}
             </button>
           )}
-          <a className="rs-btn rs-btn-tinted" href={channelExternalUrl} target="_blank" rel="noreferrer">
+          <a className="rs-btn rs-btn-tinted" href={channelExternalUrl} target="_blank" rel="noopener noreferrer">
             Mở kênh trên YouTube ↗
           </a>
         </div>
@@ -304,9 +305,9 @@ export const VideoDetailScreen: React.FC = () => {
           </button>
           <a
             className="rs-btn rs-btn-primary"
-            href={`https://www.youtube.com/watch?v=${video.id}`}
+            href={`https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
           >
             Mở video trên YouTube ↗
           </a>
@@ -627,7 +628,7 @@ const ArticleDetailBody: React.FC<{
             {saving ? 'Đang lưu...' : 'Lưu ghi chú bài báo'}
           </button>
           {safeExternalUrl && (
-            <a className="rs-btn rs-btn-secondary" href={safeExternalUrl} target="_blank" rel="noreferrer">
+            <a className="rs-btn rs-btn-secondary" href={safeExternalUrl} target="_blank" rel="noopener noreferrer">
               Mở bài viết gốc ngoài trình duyệt (https://) ↗
             </a>
           )}
@@ -864,7 +865,7 @@ const IdeaCoreEditor: React.FC<{
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <span className="rs-badge">Nguồn: {idea.sourceTitleSnapshot || 'Tạo thủ công'}</span>
           {safeSourceUrl && (
-            <a href={safeSourceUrl} target="_blank" rel="noreferrer" className="rs-badge">
+            <a href={safeSourceUrl} target="_blank" rel="noopener noreferrer" className="rs-badge">
               Liên kết nguồn gốc ↗
             </a>
           )}
@@ -1011,7 +1012,7 @@ const ProjectLinkEditorCard: React.FC<{
       </label>
       {safePublishedUrl && (
         <div style={{ fontSize: '12.5px' }}>
-          <a href={safePublishedUrl} target="_blank" rel="noreferrer">
+          <a href={safePublishedUrl} target="_blank" rel="noopener noreferrer">
             Mở video đã xuất bản ↗
           </a>
         </div>
@@ -1311,11 +1312,11 @@ const SystemSettingsForm: React.FC = () => {
         <p style={{ margin: 0, fontSize: '13.5px', color: 'var(--rs-text-secondary)' }}>
           Research Studio sử dụng <strong>YouTube API Services</strong> cục bộ (0% Telemetry). Sử dụng tính năng YouTube
           đồng nghĩa tuân theo{' '}
-          <a href={systemSettings.legalLinks.youtubeTosUrl} target="_blank" rel="noreferrer">
+          <a href={systemSettings.legalLinks.youtubeTosUrl} target="_blank" rel="noopener noreferrer">
             YouTube Terms of Service
           </a>{' '}
           và{' '}
-          <a href={systemSettings.legalLinks.googlePrivacyUrl} target="_blank" rel="noreferrer">
+          <a href={systemSettings.legalLinks.googlePrivacyUrl} target="_blank" rel="noopener noreferrer">
             Google Privacy Policy
           </a>
           . Dữ liệu từ YouTube API lưu tối đa 30 ngày lịch.

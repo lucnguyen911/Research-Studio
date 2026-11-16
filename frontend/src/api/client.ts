@@ -37,10 +37,9 @@ import type {
   YoutubeCategoryDto,
 } from './types';
 
-export const CSRF_HEADER_NAME = 'X-Research-Studio-Client';
-export const CSRF_HEADER_VALUE = 'local-web';
-
-const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const CSRF_HEADER_NAME = 'X-Research-Studio-Client';
+const CSRF_HEADER_VALUE = 'local-web';
+export { CSRF_HEADER_NAME, CSRF_HEADER_VALUE };
 
 export class ApiClientError extends Error {
   readonly code: string;
@@ -65,14 +64,12 @@ export function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-function buildHeaders(method: string, extra?: HeadersInit): Headers {
+function buildHeaders(_method: string, extra?: HeadersInit): Headers {
   const headers = new Headers(extra);
   if (!headers.has('Accept')) {
     headers.set('Accept', 'application/json');
   }
-  if (MUTATING_METHODS.has(method.toUpperCase())) {
-    headers.set(CSRF_HEADER_NAME, CSRF_HEADER_VALUE);
-  }
+  headers.set(CSRF_HEADER_NAME, CSRF_HEADER_VALUE);
   return headers;
 }
 

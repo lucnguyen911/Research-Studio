@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 import logging
 from typing import Any
 
@@ -8,7 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.logging_setup import LOGGER_NAME
+from app.core.logging_setup import LOGGER_NAME, redact_sensitive_text
 
 
 class AppError(Exception):
@@ -47,6 +48,22 @@ def error_json_response(
     )
 
 
+def _sanitize_validation_errors(raw_errors: Sequence[Any]) -> list[dict[str, Any]]:
+    """Strip raw client inputs from 422 details so invalid API key payloads are never echoed back."""
+    sanitized: list[dict[str, Any]] = []
+    for err in raw_errors:
+        if not isinstance(err, dict):
+            continue
+        sanitized.append(
+            {
+                "loc": list(err.get("loc", ())),
+                "type": str(err.get("type", "validation_error")),
+                "msg": redact_sensitive_text(str(err.get("msg", "Invalid value"))),
+            }
+        )
+    return sanitized
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Attach standardized JSON error handlers covering AppError, validation, HTTP, and 500s."""
     logger = logging.getLogger(LOGGER_NAME)
@@ -66,7 +83,7 @@ def register_error_handlers(app: FastAPI) -> None:
             code="VALIDATION_ERROR",
             message="Dữ liệu đầu vào không hợp lệ.",
             status_code=422,
-            details=exc.errors(),
+            details=_sanitize_validation_errors(exc.errors()),
         )
 
     @app.exception_handler(StarletteHTTPException)

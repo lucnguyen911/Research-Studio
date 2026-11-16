@@ -12,8 +12,9 @@ import re
 import socket
 import ssl
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import unquote, urljoin, urlsplit
 import xml.etree.ElementTree as stdlib_ET
+import zlib
 
 import anyio
 import certifi
@@ -101,12 +102,20 @@ def _default_dns_resolver(host: str, port: int) -> list[tuple[Any, ...]]:
 
 _NAT64_WELL_KNOWN_NET = ipaddress.ip_network("64:ff9b::/96")
 _NAT64_LOCAL_USE_NET = ipaddress.ip_network("64:ff9b:1::/48")
+_OBFUSCATED_IPV4_LABEL_RE = re.compile(r"^(?:0x[0-9a-f]+|\d+)$")
+_BLOCKED_INTERNAL_SUFFIXES = (".localhost", ".local", ".internal", ".arpa", ".home.arpa")
 
 
 def _ensure_ip_globally_routable(raw_ip: str) -> None:
-    stripped = raw_ip.split("%")[0].strip()
+    cleaned = raw_ip.strip()
+    if "%" in cleaned:
+        raise AppError(
+            code="RSS_SSRF_BLOCKED",
+            message="Bị chặn vì lý do bảo mật SSRF: không cho phép chỉ số vùng IPv6 (zone index).",
+            status_code=400,
+        )
     try:
-        ip = ipaddress.ip_address(stripped)
+        ip = ipaddress.ip_address(cleaned)
     except ValueError as exc:
         raise AppError("RSS_SSRF_BLOCKED", "Địa chỉ IP đích của nguồn RSS không hợp lệ.", status_code=400) from exc
 
@@ -124,8 +133,20 @@ def _ensure_ip_globally_routable(raw_ip: str) -> None:
             _ensure_ip_globally_routable(str(embedded_ip))
 
     if isinstance(ip, ipaddress.IPv6Address):
+        ip_int = int(ip)
+        if ((ip_int >> 32) & 0xFDFFFFFF) == 0x00005EFE:
+            embedded_v4 = ipaddress.IPv4Address(ip_int & 0xFFFFFFFF)
+            _ensure_ip_globally_routable(str(embedded_v4))
+            raise AppError(
+                code="RSS_SSRF_BLOCKED",
+                message="Bị chặn vì lý do bảo mật SSRF: không cho phép địa chỉ chuyển tiếp ISATAP.",
+                status_code=400,
+                details={"blockedIp": str(ip)},
+            )
+        if (ip_int >> 32) == 0xFFFF:
+            _ensure_ip_globally_routable(str(ipaddress.IPv4Address(ip_int & 0xFFFFFFFF)))
         if ip in _NAT64_WELL_KNOWN_NET:
-            embedded_v4 = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+            embedded_v4 = ipaddress.IPv4Address(ip_int & 0xFFFFFFFF)
             _ensure_ip_globally_routable(str(embedded_v4))
         elif ip in _NAT64_LOCAL_USE_NET:
             raise AppError(
@@ -152,6 +173,45 @@ def _ensure_ip_globally_routable(raw_ip: str) -> None:
         )
 
 
+def _normalize_and_validate_rss_host(raw_host: str) -> tuple[str, bool]:
+    """Normalize hostname/IP literal and reject internal domains, zone IDs, and obfuscated numeric IPv4."""
+    decoded = unquote(raw_host).strip()
+    if "%" in raw_host or "%" in decoded:
+        raise AppError(
+            code="RSS_SSRF_BLOCKED",
+            message="Bị chặn vì lý do bảo mật SSRF: không cho phép chỉ số vùng IPv6 trong tên máy chủ.",
+            status_code=400,
+        )
+    clean_host = decoded.strip("[]").strip().lower().rstrip(".")
+    if not clean_host:
+        raise AppError("RSS_INVALID_URL", "URL RSS thiếu tên miền hợp lệ.", status_code=400)
+
+    if clean_host == "localhost" or clean_host.endswith(_BLOCKED_INTERNAL_SUFFIXES):
+        raise AppError(
+            code="RSS_SSRF_BLOCKED",
+            message="Bị chặn vì lý do bảo mật SSRF: không cho phép truy cập localhost hoặc tên miền nội bộ.",
+            status_code=400,
+        )
+
+    try:
+        ipaddress.ip_address(clean_host)
+    except ValueError:
+        pass
+    else:
+        _ensure_ip_globally_routable(clean_host)
+        return clean_host, True
+
+    labels = clean_host.split(".")
+    if labels and all(_OBFUSCATED_IPV4_LABEL_RE.fullmatch(lbl) for lbl in labels):
+        raise AppError(
+            code="RSS_SSRF_BLOCKED",
+            message="Bị chặn vì lý do bảo mật SSRF: không cho phép địa chỉ IP dạng số hoặc hệ cơ số không chuẩn.",
+            status_code=400,
+        )
+
+    return clean_host, False
+
+
 def validate_public_feed_url(raw_url: str, *, resolver: DnsResolver | None = None) -> str:
     """Validate RSS URL protocol, hostname, and ensure every resolved DNS IP is globally routable."""
     cleaned = raw_url.strip()
@@ -169,29 +229,8 @@ def validate_public_feed_url(raw_url: str, *, resolver: DnsResolver | None = Non
             message="URL RSS không được chứa thông tin đăng nhập.",
             status_code=400,
         )
-    hostname = (parts.hostname or "").strip().lower()
-    if not hostname:
-        raise AppError("RSS_INVALID_URL", "URL RSS thiếu tên miền hợp lệ.", status_code=400)
-
-    if (
-        hostname == "localhost"
-        or hostname.endswith(".localhost")
-        or hostname.endswith(".local")
-        or hostname.endswith(".internal")
-        or hostname.endswith(".arpa")
-    ):
-        raise AppError(
-            code="RSS_SSRF_BLOCKED",
-            message="Bị chặn vì lý do bảo mật SSRF: không cho phép truy cập localhost hoặc tên miền nội bộ.",
-            status_code=400,
-        )
-
-    try:
-        ipaddress.ip_address(hostname)
-    except ValueError:
-        pass
-    else:
-        _ensure_ip_globally_routable(hostname)
+    hostname, is_ip_literal = _normalize_and_validate_rss_host(parts.hostname or "")
+    if is_ip_literal:
         return cleaned
 
     port = parts.port or (443 if scheme == "https" else 80)
@@ -380,24 +419,8 @@ class _SafePublicNetworkBackend(httpcore.AsyncNetworkBackend):
         local_address: str | None = None,
         socket_options: Any = None,
     ) -> httpcore.AsyncNetworkStream:
-        clean_host = host.strip("[]")
-        lowered = clean_host.lower()
-        if (
-            lowered == "localhost"
-            or lowered.endswith(".localhost")
-            or lowered.endswith(".local")
-            or lowered.endswith(".internal")
-            or lowered.endswith(".arpa")
-        ):
-            raise AppError(
-                code="RSS_SSRF_BLOCKED",
-                message="Bị chặn vì lý do bảo mật SSRF: không cho phép truy cập localhost hoặc tên miền nội bộ.",
-                status_code=400,
-            )
-
-        try:
-            ipaddress.ip_address(clean_host)
-        except ValueError:
+        clean_host, is_ip_literal = _normalize_and_validate_rss_host(host)
+        if not is_ip_literal:
             try:
                 addr_infos = await anyio.to_thread.run_sync(lambda: self._resolver(clean_host, port))
             except OSError as exc:
@@ -414,7 +437,7 @@ class _SafePublicNetworkBackend(httpcore.AsyncNetworkBackend):
             for info in addr_infos:
                 sockaddr = info[4]
                 if isinstance(sockaddr, tuple) and sockaddr:
-                    ip_str = str(sockaddr[0]).split("%")[0].strip()
+                    ip_str = str(sockaddr[0]).strip()
                     _ensure_ip_globally_routable(ip_str)
                     if ip_str not in seen:
                         seen.add(ip_str)
@@ -438,7 +461,6 @@ class _SafePublicNetworkBackend(httpcore.AsyncNetworkBackend):
                 raise last_connect_err
             raise httpcore.ConnectError(str(last_connect_err or "TCP connect failed")) from last_connect_err
 
-        _ensure_ip_globally_routable(clean_host)
         return await self._inner.connect_tcp(
             clean_host,
             port,
@@ -515,6 +537,117 @@ class _PinnedPublicHTTPTransport(httpx.AsyncBaseTransport):
         await self._pool.aclose()
 
 
+async def _read_bounded_feed_bytes(response: httpx.Response) -> bytes:
+    """Stream raw bytes with strict compressed AND decompressed payload bounds to prevent decompression bombs."""
+    encoding = response.headers.get("content-encoding", "").strip().lower()
+    decompressor: Any = None
+    is_deflate = False
+    if encoding in ("", "identity"):
+        decompressor = None
+    elif encoding in ("gzip", "x-gzip"):
+        decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    elif encoding == "deflate":
+        decompressor = zlib.decompressobj(zlib.MAX_WBITS)
+        is_deflate = True
+    else:
+        raise AppError(
+            code="RSS_UNSUPPORTED_ENCODING",
+            message="Nguồn RSS sử dụng kiểu nén Content-Encoding không được hỗ trợ an toàn.",
+            status_code=422,
+        )
+
+    if hasattr(response, "_content"):
+        preloaded = response.content
+        if len(preloaded) > RSS_MAX_PAYLOAD_BYTES:
+            raise AppError(
+                code="RSS_PAYLOAD_TOO_LARGE",
+                message="Kích thước nguồn RSS vượt quá giới hạn an toàn 5 MB.",
+                status_code=413,
+            )
+        return preloaded
+
+    chunks: list[bytes] = []
+    raw_total = 0
+    decompressed_total = 0
+    first_deflate_chunk = is_deflate
+
+    async for raw_chunk in response.aiter_raw():
+        if not raw_chunk:
+            continue
+        raw_total += len(raw_chunk)
+        if raw_total > RSS_MAX_PAYLOAD_BYTES:
+            raise AppError(
+                code="RSS_PAYLOAD_TOO_LARGE",
+                message="Kích thước nguồn RSS vượt quá giới hạn an toàn 5 MB.",
+                status_code=413,
+            )
+        if decompressor is None:
+            decompressed_total += len(raw_chunk)
+            if decompressed_total > RSS_MAX_PAYLOAD_BYTES:
+                raise AppError(
+                    code="RSS_PAYLOAD_TOO_LARGE",
+                    message="Kích thước nguồn RSS vượt quá giới hạn an toàn 5 MB.",
+                    status_code=413,
+                )
+            chunks.append(raw_chunk)
+            continue
+
+        budget = (RSS_MAX_PAYLOAD_BYTES + 1) - decompressed_total
+        try:
+            piece = decompressor.decompress(raw_chunk, max_length=max(1, budget))
+            first_deflate_chunk = False
+        except zlib.error as exc:
+            if first_deflate_chunk:
+                first_deflate_chunk = False
+                decompressor = zlib.decompressobj(-zlib.MAX_WBITS)
+                try:
+                    piece = decompressor.decompress(raw_chunk, max_length=max(1, budget))
+                except zlib.error as inner_exc:
+                    raise AppError(
+                        code="RSS_INVALID_ENCODING",
+                        message="Dữ liệu nén deflate của nguồn RSS bị hỏng.",
+                        status_code=422,
+                    ) from inner_exc
+            else:
+                raise AppError(
+                    code="RSS_INVALID_ENCODING",
+                    message="Dữ liệu nén của nguồn RSS bị hỏng.",
+                    status_code=422,
+                ) from exc
+
+        decompressed_total += len(piece)
+        if decompressed_total > RSS_MAX_PAYLOAD_BYTES or decompressor.unconsumed_tail:
+            raise AppError(
+                code="RSS_PAYLOAD_TOO_LARGE",
+                message="Kích thước nội dung RSS sau giải nén vượt quá giới hạn an toàn 5 MB.",
+                status_code=413,
+            )
+        if piece:
+            chunks.append(piece)
+
+    if decompressor is not None:
+        flush_budget = (RSS_MAX_PAYLOAD_BYTES + 1) - decompressed_total
+        try:
+            tail = decompressor.flush(max(1, flush_budget))
+        except zlib.error as exc:
+            raise AppError(
+                code="RSS_INVALID_ENCODING",
+                message="Dữ liệu nén của nguồn RSS không hoàn chỉnh.",
+                status_code=422,
+            ) from exc
+        decompressed_total += len(tail)
+        if decompressed_total > RSS_MAX_PAYLOAD_BYTES or decompressor.unconsumed_tail:
+            raise AppError(
+                code="RSS_PAYLOAD_TOO_LARGE",
+                message="Kích thước nội dung RSS sau giải nén vượt quá giới hạn an toàn 5 MB.",
+                status_code=413,
+            )
+        if tail:
+            chunks.append(tail)
+
+    return b"".join(chunks)
+
+
 async def fetch_and_parse_feed(
     url: str,
     *,
@@ -525,7 +658,7 @@ async def fetch_and_parse_feed(
     Fetch an RSS/Atom feed safely:
     - Re-validates DNS/IP on the initial URL and EVERY HTTP redirect hop (<= 3 hops).
     - Pins TCP connections via _SafePublicNetworkBackend to defend against DNS rebinding TOCTOU.
-    - Aborts streaming payloads larger than 5 MB.
+    - Aborts streaming payloads (compressed or decompressed) larger than 5 MB.
     - Parses via defusedxml and strips unsafe HTML subtrees via HTMLParser.
     """
     current_url = await anyio.to_thread.run_sync(lambda: validate_public_feed_url(url, resolver=resolver))
@@ -545,7 +678,10 @@ async def fetch_and_parse_feed(
                 async with client.stream(
                     "GET",
                     current_url,
-                    headers={"User-Agent": "ResearchStudio-RSS/1.0 (+local-first)"},
+                    headers={
+                        "User-Agent": "ResearchStudio-RSS/1.0 (+local-first)",
+                        "Accept-Encoding": "gzip, deflate",
+                    },
                 ) as response:
                     if response.status_code in (301, 302, 303, 307, 308):
                         location = response.headers.get("location", "").strip()
@@ -567,18 +703,8 @@ async def fetch_and_parse_feed(
                             details={"httpStatus": response.status_code},
                         )
 
-                    chunks: list[bytes] = []
-                    total_bytes = 0
-                    async for chunk in response.aiter_bytes():
-                        total_bytes += len(chunk)
-                        if total_bytes > RSS_MAX_PAYLOAD_BYTES:
-                            raise AppError(
-                                code="RSS_PAYLOAD_TOO_LARGE",
-                                message="Kích thước nguồn RSS vượt quá giới hạn an toàn 5 MB.",
-                                status_code=413,
-                            )
-                        chunks.append(chunk)
-                    return parse_feed_xml(b"".join(chunks))
+                    raw_payload = await _read_bounded_feed_bytes(response)
+                    return parse_feed_xml(raw_payload)
             except httpx.ConnectError as exc:
                 raise AppError("RSS_CONNECT_FAILED", "Không thể kết nối tới máy chủ RSS.", status_code=503) from exc
             except httpx.TimeoutException as exc:

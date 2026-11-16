@@ -31,6 +31,9 @@ YOUTUBE_TOS_URL = "https://www.youtube.com/t/terms"
 GOOGLE_PRIVACY_POLICY_URL = "https://policies.google.com/privacy"
 YOUTUBE_BRANDING_URL = "https://developers.google.com/youtube/terms/branding-guidelines"
 
+DEFAULT_BIND_HOST = "127.0.0.1"
+ALLOWED_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
+
 DEFAULT_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -38,7 +41,21 @@ DEFAULT_ALLOWED_ORIGINS = [
     "http://127.0.0.1:4173",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    "tauri://localhost",
 ]
+
+
+def validate_loopback_bind_host(host: str) -> str:
+    """Ensure the local server binds strictly to a loopback interface rather than 0.0.0.0 or LAN IPs."""
+    cleaned = host.strip()
+    lowered = cleaned.lower()
+    if lowered not in {"127.0.0.1", "localhost", "::1"}:
+        raise ValueError(
+            f"Refusing non-loopback bind host {host!r}; Research Studio must bind strictly to 127.0.0.1/localhost/::1."
+        )
+    return cleaned
 
 
 def get_data_dir() -> Path:

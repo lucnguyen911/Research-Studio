@@ -554,7 +554,7 @@ export const TrendDiscoveryScreen: React.FC = () => {
         <a
           href="https://www.youtube.com/feed/trending"
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           style={{ marginLeft: 'auto', fontSize: '12.5px', fontWeight: 600, color: 'var(--rs-accent-text)' }}
         >
           Dữ liệu thuộc YouTube ↗
@@ -1401,7 +1401,7 @@ export const RssNewsScreen: React.FC = () => {
                         {art.bookmarked ? 'Bỏ đánh dấu' : '☆ Đánh dấu'}
                       </button>
                       {safeExternalUrl && (
-                        <a className="rs-btn rs-btn-sm rs-btn-secondary" href={safeExternalUrl} target="_blank" rel="noreferrer">
+                        <a className="rs-btn rs-btn-sm rs-btn-secondary" href={safeExternalUrl} target="_blank" rel="noopener noreferrer">
                           Mở bài gốc ↗
                         </a>
                       )}
@@ -1618,7 +1618,7 @@ export const GlobalIdeaVaultScreen: React.FC = () => {
                           Nguồn: {idea.sourceTitleSnapshot || 'Tạo thủ công'}
                         </span>
                         {safeSourceUrl && (
-                          <a href={safeSourceUrl} target="_blank" rel="noreferrer" className="rs-badge">
+                          <a href={safeSourceUrl} target="_blank" rel="noopener noreferrer" className="rs-badge">
                             Mở liên kết nguồn ↗
                           </a>
                         )}

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -200,6 +202,40 @@ async def call_youtube_api(
     raise AppError("YOUTUBE_UPSTREAM_ERROR", "Không thể hoàn tất yêu cầu tới YouTube Data API.", status_code=502)
 
 
+def _sanitize_https_thumbnail_url(raw_url: Any) -> str | None:
+    """Allow strictly public HTTPS thumbnail URLs without credentials or local/private targets."""
+    if not isinstance(raw_url, str):
+        return None
+    cleaned = raw_url.strip()
+    if not cleaned:
+        return None
+    parts = urlsplit(cleaned)
+    if parts.scheme.lower() != "https" or parts.username or parts.password:
+        return None
+    hostname = (parts.hostname or "").strip().lower().rstrip(".")
+    if (
+        not hostname
+        or hostname == "localhost"
+        or hostname.endswith((".localhost", ".local", ".internal", ".arpa"))
+    ):
+        return None
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return cleaned
+    if (
+        not ip.is_global
+        or ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    ):
+        return None
+    return cleaned
+
+
 def _pick_thumbnail_url(snippet: dict[str, Any]) -> str | None:
     thumbs = snippet.get("thumbnails")
     if not isinstance(thumbs, dict):
@@ -207,7 +243,9 @@ def _pick_thumbnail_url(snippet: dict[str, Any]) -> str | None:
     for size in ("high", "medium", "default", "standard"):
         entry = thumbs.get(size)
         if isinstance(entry, dict) and entry.get("url"):
-            return str(entry["url"])
+            safe_url = _sanitize_https_thumbnail_url(entry["url"])
+            if safe_url:
+                return safe_url
     return None
 
 

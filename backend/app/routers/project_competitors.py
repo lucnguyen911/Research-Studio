@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from app.db.connection import run_db_sync
@@ -74,10 +74,10 @@ async def delete_project_competitor(project_id: str, channel_id: str) -> dict[st
 @router.get("/breakout-videos")
 async def list_breakout_videos(
     project_id: str,
-    daysWindow: int | None = None,
+    daysWindow: int | None = Query(default=None, ge=1, le=365),
     sourceFormat: Literal["all", "long_form", "shorts", "unknown"] = "all",
     includeManual: bool = False,
-    minViews: int | None = None,
+    minViews: int | None = Query(default=None, ge=0),
     onlyFlagged: bool = False,
     sortBy: Literal["viewCount", "likeCount", "commentCount", "publishedAt", "durationSeconds"] = "viewCount",
     sortDir: Literal["desc", "asc"] = "desc",

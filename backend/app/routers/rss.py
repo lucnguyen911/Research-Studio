@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from app.db.connection import run_db_sync
@@ -63,11 +63,11 @@ async def refresh_enabled_feeds() -> dict[str, object]:
 
 @router.get("/articles")
 async def get_articles(
-    feedId: str | None = None,
-    projectId: str | None = None,
+    feedId: str | None = Query(default=None, max_length=64),
+    projectId: str | None = Query(default=None, max_length=64),
     onlyBookmarked: bool = False,
-    search: str = "",
-    limit: int = 100,
+    search: str = Query(default="", max_length=200),
+    limit: int = Query(default=100, ge=1, le=200),
 ) -> dict[str, object]:
     items = await run_db_sync(
         rss_repo.list_articles,
@@ -94,7 +94,11 @@ async def update_article_detail(article_id: str, payload: UpdateArticleRequest) 
 
 
 @router.get("/phrases")
-async def get_rss_phrases(projectId: str | None = None, days: int = 7, limit: int = 10) -> dict[str, object]:
+async def get_rss_phrases(
+    projectId: str | None = Query(default=None, max_length=64),
+    days: int = Query(default=7, ge=1, le=90),
+    limit: int = Query(default=10, ge=1, le=30),
+) -> dict[str, object]:
     return await run_db_sync(
         rss_service.compute_rss_phrases,
         project_id=projectId,
