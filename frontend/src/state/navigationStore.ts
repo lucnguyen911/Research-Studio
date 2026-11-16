@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useLayoutEffect } from 'react';
 import type { NavHistoryEntry, RouteParams, ScreenId, ViewFilterState } from '../prototype/types';
-import { DEMO_PROJECTS } from '../prototype/demoData';
 
 const STORAGE_KEY = 'rs_nav_stack_v1';
 
@@ -19,7 +18,7 @@ export const DEFAULT_VIEW_STATE: ViewFilterState = {
   onlyBreakout: false,
   onlyBookmarked: false,
   selectedFeedId: 'all',
-  selectedKeywordId: 'kw-01',
+  selectedKeywordId: '',
   sortBy: 'viewCount',
   sortDir: 'desc',
   tab: 'channels',
@@ -104,7 +103,7 @@ function saveStoreToSession(state: NavStoreState): void {
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
-    // Ignore storage quota errors in sandboxed iframes
+    // Ignore storage quota errors
   }
 }
 
@@ -112,8 +111,6 @@ function loadInitialStore(): NavStoreState {
   if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
     window.history.scrollRestoration = 'manual';
   }
-
-  const fallbackPid = DEMO_PROJECTS[0]?.id ?? null;
 
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -139,13 +136,43 @@ function loadInitialStore(): NavStoreState {
     // Corrupted sessionStorage falls back cleanly
   }
 
-  const initialEntry = parseHashToFallbackEntry(fallbackPid);
+  const initialEntry = parseHashToFallbackEntry(null);
   const initialState: NavStoreState = { entries: [initialEntry], index: 0 };
   if (typeof window !== 'undefined') {
     window.history.replaceState({ entryId: initialEntry.entryId }, '', buildHash(initialEntry));
   }
   saveStoreToSession(initialState);
   return initialState;
+}
+
+let activeProjectController: AbortController = new AbortController();
+
+export function abortActiveProjectRequests(): void {
+  activeProjectController.abort();
+  activeProjectController = new AbortController();
+}
+
+export function createProjectScopedController(): {
+  controller: AbortController;
+  release: () => void;
+} {
+  const localController = new AbortController();
+  const parentSignal = activeProjectController.signal;
+  if (parentSignal.aborted) {
+    localController.abort();
+    return { controller: localController, release: () => undefined };
+  }
+  const onParentAbort = () => {
+    localController.abort();
+  };
+  parentSignal.addEventListener('abort', onParentAbort, { once: true });
+  return {
+    controller: localController,
+    release: () => {
+      parentSignal.removeEventListener('abort', onParentAbort);
+      localController.abort();
+    },
+  };
 }
 
 let navState: NavStoreState = loadInitialStore();
@@ -169,17 +196,24 @@ export function getNavSnapshot(): NavStoreState {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('popstate', (event: PopStateEvent) => {
+    const prevProjectId = navState.entries[navState.index]?.projectId ?? null;
     const stateObj = event.state as { entryId?: string } | null;
     if (stateObj?.entryId) {
       const idx = navState.entries.findIndex((e) => e.entryId === stateObj.entryId);
       if (idx >= 0) {
+        const nextEntry = navState.entries[idx];
+        if (nextEntry.projectId !== prevProjectId) {
+          abortActiveProjectRequests();
+        }
         navState = { ...navState, index: idx };
         emit();
         return;
       }
     }
-    const activePid = navState.entries[navState.index]?.projectId ?? DEMO_PROJECTS[0]?.id ?? null;
-    const fallbackEntry = parseHashToFallbackEntry(activePid);
+    const fallbackEntry = parseHashToFallbackEntry(prevProjectId);
+    if (fallbackEntry.projectId !== prevProjectId) {
+      abortActiveProjectRequests();
+    }
     navState = { entries: [fallbackEntry], index: 0 };
     emit();
   });
@@ -195,6 +229,9 @@ export function navigateTo(
 ): void {
   const current = navState.entries[navState.index];
   const nextProjectId = options?.projectId !== undefined ? options.projectId : current.projectId;
+  if (nextProjectId !== current.projectId) {
+    abortActiveProjectRequests();
+  }
   const nextEntry: NavHistoryEntry = {
     entryId: makeEntryId(),
     screenId,
@@ -230,6 +267,7 @@ export function goForward(): void {
 }
 
 export function switchActiveProjectAtomic(newProjectId: string | null): void {
+  abortActiveProjectRequests();
   const current = navState.entries[navState.index];
   const targetScreen: ScreenId =
     isProjectScopedScreen(current.screenId) ? current.screenId : 'project-overview';
@@ -259,21 +297,46 @@ export function updateCurrentViewState(partial: Partial<ViewFilterState>, option
   emit();
 }
 
-export function reconcileValidProjects(validProjectIds: string[]): void {
+export function reconcileValidProjects(
+  validProjectIds: string[],
+  onDeletedFallback?: (message: string) => void,
+): void {
   const current = navState.entries[navState.index];
+
+  if (!current.projectId && validProjectIds.length > 0) {
+    const nextEntry: NavHistoryEntry = {
+      ...current,
+      projectId: validProjectIds[0],
+    };
+    const nextEntries = [...navState.entries];
+    nextEntries[navState.index] = nextEntry;
+    navState = { ...navState, entries: nextEntries };
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({ entryId: nextEntry.entryId }, '', buildHash(nextEntry));
+    }
+    emit();
+    return;
+  }
+
   if (current.projectId && !validProjectIds.includes(current.projectId)) {
+    abortActiveProjectRequests();
     const fallbackId = validProjectIds[0] ?? null;
-    const nextScreen: ScreenId = fallbackId
-      ? isProjectScopedScreen(current.screenId)
-        ? current.screenId
-        : 'project-overview'
-      : 'global-overview';
+    const isDetailFromProject = current.screenId === 'channel-detail';
+    const nextScreen: ScreenId =
+      isProjectScopedScreen(current.screenId) || isDetailFromProject
+        ? fallbackId
+          ? isProjectScopedScreen(current.screenId)
+            ? current.screenId
+            : 'project-overview'
+          : 'global-overview'
+        : current.screenId;
+
     const nextEntry: NavHistoryEntry = {
       ...current,
       entryId: makeEntryId(),
       screenId: nextScreen,
       projectId: fallbackId,
-      params: {},
+      params: isProjectScopedScreen(nextScreen) || nextScreen === 'global-overview' ? {} : current.params,
       viewState: { ...DEFAULT_VIEW_STATE },
     };
     const nextEntries = [...navState.entries];
@@ -283,6 +346,11 @@ export function reconcileValidProjects(validProjectIds: string[]): void {
       window.history.replaceState({ entryId: nextEntry.entryId }, '', buildHash(nextEntry));
     }
     emit();
+    onDeletedFallback?.(
+      fallbackId
+        ? 'Project trước đó không còn tồn tại; đã tự động chuyển sang Project khả dụng.'
+        : 'Project trước đó đã bị xóa; đã chuyển an toàn về Global Research.',
+    );
   }
 }
 
@@ -313,10 +381,12 @@ export function useScrollContainerSync(
   scrollRef: React.RefObject<HTMLElement | null>,
   entryId: string,
   targetScrollTop: number,
+  contentReady = true,
 ): () => void {
   const isRestoringRef = React.useRef(false);
 
   useLayoutEffect(() => {
+    if (!contentReady) return undefined;
     const el = scrollRef.current;
     if (!el) return undefined;
     isRestoringRef.current = true;
@@ -330,7 +400,7 @@ export function useScrollContainerSync(
       window.cancelAnimationFrame(rafId);
       isRestoringRef.current = false;
     };
-  }, [entryId, scrollRef, targetScrollTop]);
+  }, [entryId, scrollRef, targetScrollTop, contentReady]);
 
   return () => {
     if (isRestoringRef.current) return;

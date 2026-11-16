@@ -40,33 +40,24 @@ const NoProjectEmpty: React.FC = () => {
 export const ProjectOverviewScreen: React.FC = () => {
   const project = useActiveProject();
   const { navigate } = useAppNavigation();
-  const { uiMode, setUiMode, channels, keywords, ideas, rssFeeds, apiCachePurged, pushToast } =
-    usePrototypeWorkspace();
+  const { isBootstrapping } = usePrototypeWorkspace();
+
+  if (isBootstrapping) {
+    return (
+      <div className="rs-container">
+        <LoadingSkeletonCard label="Đang tải thông tin Project từ SQLite..." />
+      </div>
+    );
+  }
 
   if (!project) return <NoProjectEmpty />;
 
-  const projectChannels = channels.filter((c) => c.projectIds.includes(project.id));
-  const projectVideos =
-    uiMode === 'empty' || apiCachePurged
-      ? []
-      : DEMO_VIDEOS.filter((v) => projectChannels.some((ch) => ch.id === v.channelId) || v.projectIds.includes(project.id));
-
-  const longCount = projectVideos.filter((v) => v.sourceFormatStatus === 'long_form').length;
-  const shortsCount = projectVideos.filter((v) => v.sourceFormatStatus === 'shorts').length;
-  const unknownCount = projectVideos.filter((v) => v.sourceFormatStatus === 'unknown').length;
-
-  const projectKeywords = keywords.filter((k) => k.projectId === project.id);
-  const projectIdeas = ideas.filter((i) => Boolean(i.projectLinks[project.id]));
-  const statusCounts: Record<IdeaStatus, number> = {
-    new: 0,
-    researching: 0,
-    approved: 0,
-    produced: 0,
-    skipped: 0,
-  };
-  for (const i of projectIdeas) {
-    statusCounts[i.projectLinks[project.id].status] += 1;
-  }
+  const formatLabel =
+    project.targetFormat === 'long_form'
+      ? 'Video dài'
+      : project.targetFormat === 'shorts'
+        ? 'Shorts'
+        : 'Tất cả định dạng';
 
   return (
     <div className="rs-container">
@@ -74,117 +65,76 @@ export const ProjectOverviewScreen: React.FC = () => {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <h1 className="rs-page-title">Tổng quan dự án (P1) — {project.name}</h1>
+            <span className="rs-badge rs-badge-success">Dữ liệu thật SQLite</span>
             <span className="rs-badge">
-              {project.regionCode} · {project.relevanceLanguage} · Standard Mode
+              {project.regionCode} · {project.relevanceLanguage} · {formatLabel}
             </span>
           </div>
-          <p className="rs-page-subtitle">{project.description}</p>
+          <p className="rs-page-subtitle">
+            {project.description || 'Chưa có mô tả định hướng kênh. Có thể bổ sung trong Cài đặt dự án (P6).'}
+          </p>
         </div>
-        <button
-          type="button"
-          className="rs-btn rs-btn-primary"
-          disabled={uiMode === 'offline'}
-          onClick={() => {
-            setUiMode('refreshing');
-            pushToast('success', `Đang làm mới đối thủ & RSS cho ${project.name} (ước tính ~4 units API).`);
-          }}
-        >
-          Làm mới Project (~4 units API)
+        <button type="button" className="rs-btn rs-btn-secondary" onClick={() => navigate('project-settings')}>
+          Chỉnh sửa Cài đặt dự án (P6)
         </button>
       </div>
 
-      <GlobalModeBanners />
+      <GlobalModeBanners requiresYouTubeApi />
 
-      {uiMode === 'loading' ? (
-        <LoadingSkeletonCard />
-      ) : (
-        <>
-          <div className="rs-grid-3">
-            <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <h2 style={{ margin: 0, fontSize: '15px' }}>Đối thủ &amp; Video còn hạn (&lt;= 30 ngày)</h2>
-              <div className="rs-tabular" style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)' }}>
-                <div>Kênh đối thủ đang theo dõi: <strong>{projectChannels.length}</strong></div>
-                <div>Video dài (Xác minh nguồn): <strong>{longCount}</strong></div>
-                <div>Shorts (Xác minh nguồn): <strong>{shortsCount}</strong></div>
-                <div>Chưa xác định (&lt;= 180s — tách riêng): <strong>{unknownCount}</strong></div>
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>
-                Không bao giờ tự động gộp nhóm Chưa xác định vào Video dài hoặc Shorts.
-              </div>
-            </section>
-
-            <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <h2 style={{ margin: 0, fontSize: '15px' }}>Từ khóa &amp; RSS liên kết</h2>
-              <div className="rs-tabular" style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)' }}>
-                <div>Từ khóa trọng tâm Project: <strong>{projectKeywords.length}</strong></div>
-                <div>
-                  Nguồn RSS đang gắn với Project: <strong>{project.linkedFeedIds.length}</strong> / {rssFeeds.length}
-                </div>
-              </div>
-              <div style={{ marginTop: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-keywords')}>
-                  Nghiên cứu từ khóa
-                </button>
-                <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-breakout')}>
-                  Video bứt phá
-                </button>
-              </div>
-            </section>
-
-            <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <h2 style={{ margin: 0, fontSize: '15px' }}>Phễu Ý tưởng của Project (5 trạng thái)</h2>
-              <div className="rs-tabular" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {(Object.keys(IDEA_STATUS_LABELS) as IdeaStatus[]).map((st) => (
-                  <span key={st} className="rs-badge">
-                    {IDEA_STATUS_LABELS[st]}: <strong>{statusCounts[st]}</strong>
-                  </span>
-                ))}
-              </div>
-              <div style={{ marginTop: 'auto' }}>
-                <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => navigate('project-ideas')}>
-                  Mở Quản lý ý tưởng (P5) →
-                </button>
-              </div>
-            </section>
-          </div>
-
-          <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ margin: 0, fontSize: '15.5px' }}>5 Video mới nhất từ đối thủ của Project (Dữ liệu API gốc)</h2>
-              <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-competitors')}>
-                Mở Theo dõi đối thủ (P2)
-              </button>
+      <div className="rs-grid-3">
+        <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <h2 style={{ margin: 0, fontSize: '15px' }}>Thông số mục tiêu Project</h2>
+          <div style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div>
+              Mã Project: <code className="rs-mono">{project.id}</code>
             </div>
-            {projectVideos.length === 0 ? (
-              <span style={{ color: 'var(--rs-text-muted)' }}>Chưa có video đối thủ khả dụng trong cache 30 ngày.</span>
-            ) : (
-              projectVideos.slice(0, 5).map((v) => (
-                <div
-                  key={v.id}
-                  style={{
-                    paddingTop: 8,
-                    borderTop: '1px solid var(--rs-border)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: 10,
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="rs-title-link"
-                    onClick={() => navigate('video-detail', { params: { videoId: v.id, fromChannelId: v.channelId } })}
-                  >
-                    {v.title}
-                  </button>
-                  <span className="rs-tabular" style={{ whiteSpace: 'nowrap', color: 'var(--rs-text-secondary)' }}>
-                    {formatInt(v.viewCount)} views · {v.durationDisplay}
-                  </span>
-                </div>
-              ))
-            )}
-          </section>
-        </>
-      )}
+            <div>
+              Thị trường / Ngôn ngữ: <strong>{project.regionCode} / {project.relevanceLanguage}</strong>
+            </div>
+            <div>
+              Định dạng trọng tâm: <strong>{formatLabel}</strong>
+            </div>
+            <div>
+              Cập nhật gần nhất: <span className="rs-tabular">{project.updatedAt}</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <h2 style={{ margin: 0, fontSize: '15px' }}>Nguồn RSS liên kết &amp; Không gian Ý tưởng</h2>
+          <div className="rs-tabular" style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)' }}>
+            <div>
+              Nguồn RSS đang gắn với Project: <strong>{project.linkedFeedIds.length}</strong> nguồn
+            </div>
+            <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)', marginTop: 4 }}>
+              Tổng hợp số liệu Đối thủ (P2), Từ khóa (P4) và Phễu Ý tưởng 5 trạng thái (P5) sẽ tự động hiển thị sau khi hoàn tất Milestone 3–6.
+            </div>
+          </div>
+          <div style={{ marginTop: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-settings')}>
+              Quản lý ở P6
+            </button>
+            <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => navigate('project-ideas')}>
+              Xem trước Quản lý ý tưởng (P5)
+            </button>
+          </div>
+        </section>
+
+        <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <h2 style={{ margin: 0, fontSize: '15px' }}>Công cụ nghiên cứu thuộc Project</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+            <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-competitors')}>
+              P2 · Theo dõi đối thủ (xem trước M5)
+            </button>
+            <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-breakout')}>
+              P3 · Video bứt phá Standard Mode (xem trước M5)
+            </button>
+            <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-keywords')}>
+              P4 · Nghiên cứu từ khóa + RSS (xem trước M5)
+            </button>
+          </div>
+        </section>
+      </div>
     </div>
   );
 };
@@ -837,45 +787,33 @@ export const ProjectIdeasScreen: React.FC = () => {
 };
 
 const ProjectSettingsForm: React.FC<{ project: ProjectItem }> = ({ project }) => {
-  const { updateProject, deleteProject, rssFeeds, pushToast } = usePrototypeWorkspace();
+  const { updateProject, exportProjectJson, deleteProject } = usePrototypeWorkspace();
+  const { navigate } = useAppNavigation();
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
   const [regionCode, setRegionCode] = useState(project.regionCode);
   const [relevanceLanguage, setRelevanceLanguage] = useState(project.relevanceLanguage);
   const [targetFormat, setTargetFormat] = useState<ProjectItem['targetFormat']>(project.targetFormat);
-  const [linkedFeedIds, setLinkedFeedIds] = useState<string[]>(project.linkedFeedIds);
+  const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-
-  const toggleFeed = (fid: string) => {
-    setLinkedFeedIds((prev) => (prev.includes(fid) ? prev.filter((id) => id !== fid) : [...prev, fid]));
-  };
-
-  const handleDownloadJson = () => {
-    const payload = {
-      schemaVersion: 'demo-project-export-v1',
-      note: 'Tệp JSON đọc-chỉ — KHÔNG chứa API Key hay dữ liệu Project khác',
-      project: { ...project, name, description, regionCode, relevanceLanguage, targetFormat, linkedFeedIds },
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `research-studio-${project.id}-demo.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    pushToast('success', 'Đã tải xuống JSON Project đọc-chỉ (không chứa API Key).');
-  };
 
   return (
     <div className="rs-container">
       <div className="rs-page-header">
         <div>
-          <h1 className="rs-page-title">Cài đặt dự án (P6) — {project.name}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <h1 className="rs-page-title">Cài đặt dự án (P6) — {project.name}</h1>
+            <span className="rs-badge rs-badge-success">Dữ liệu thật SQLite</span>
+          </div>
           <p className="rs-page-subtitle">
-            Cấu hình thị trường/ngôn ngữ, liên kết nguồn RSS toàn cục và quản trị an toàn Project
+            Cấu hình thị trường/ngôn ngữ cô lập theo Project, tải JSON sạch đọc-chỉ và xóa Project an toàn
           </p>
         </div>
       </div>
+
+      <GlobalModeBanners />
 
       <section className="rs-card" style={{ maxWidth: 820, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -918,33 +856,60 @@ const ProjectSettingsForm: React.FC<{ project: ProjectItem }> = ({ project }) =>
           </label>
         </div>
 
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Nguồn RSS toàn cục liên kết với Project này (<code>project_rss_feeds</code>):</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {rssFeeds.map((f) => (
-              <label key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={linkedFeedIds.includes(f.id)}
-                  onChange={() => toggleFeed(f.id)}
-                />
-                <span>{f.name}</span>
-              </label>
-            ))}
+        <div className="rs-card-subtle" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '13.5px' }}>
+              Nguồn RSS toàn cục đang liên kết: <strong>{project.linkedFeedIds.length}</strong> nguồn
+            </div>
+            <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
+              Checkbox chọn/bỏ chọn từng nguồn RSS cho Project sẽ được mở ở Task T11 cùng bộ thu thập RSS thật.
+            </div>
           </div>
+          <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('global-news')}>
+            Đi tới G4 RSS
+          </button>
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 4 }}>
           <button
             type="button"
             className="rs-btn rs-btn-primary"
-            disabled={!name.trim()}
-            onClick={() => updateProject(project.id, { name, description, regionCode, relevanceLanguage, targetFormat, linkedFeedIds })}
+            disabled={!name.trim() || saving}
+            onClick={() => {
+              void (async () => {
+                setSaving(true);
+                try {
+                  await updateProject(project.id, {
+                    name,
+                    description,
+                    regionCode,
+                    relevanceLanguage,
+                    targetFormat,
+                  });
+                } finally {
+                  setSaving(false);
+                }
+              })();
+            }}
           >
-            Lưu cấu hình Project
+            {saving ? 'Đang lưu...' : 'Lưu cấu hình Project'}
           </button>
-          <button type="button" className="rs-btn rs-btn-secondary" onClick={handleDownloadJson}>
-            Tải xuống JSON Project đơn giản (0 API Key)
+          <button
+            type="button"
+            className="rs-btn rs-btn-secondary"
+            disabled={exporting}
+            onClick={() => {
+              void (async () => {
+                setExporting(true);
+                try {
+                  await exportProjectJson(project.id, project.name);
+                } finally {
+                  setExporting(false);
+                }
+              })();
+            }}
+          >
+            {exporting ? 'Đang xuất JSON...' : 'Tải xuống JSON Project đơn giản (0 API Key)'}
           </button>
         </div>
       </section>
@@ -957,11 +922,17 @@ const ProjectSettingsForm: React.FC<{ project: ProjectItem }> = ({ project }) =>
           Khu vực nguy hiểm: Xóa Project an toàn
         </h2>
         <p style={{ margin: 0, fontSize: '13.5px', color: 'var(--rs-text-secondary)' }}>
-          Chỉ xóa Project này và các bảng liên kết/từ khóa riêng của Project. Hệ thống giữ nguyên 100% thực thể kênh/video
-          dùng chung và Kho ý tưởng chung (kèm sao lưu tự động trên Backend thật ở Phase 7).
+          Chỉ xóa Project này và các bảng liên kết/từ khóa riêng của Project. Backend tự động tạo tệp sao lưu{' '}
+          <code>project_recovery_*.json</code> trong thư mục <code>backups/</code> và bảo toàn 100% thực thể kênh/video
+          dùng chung cùng Kho ý tưởng chung.
         </p>
         <div>
-          <button type="button" className="rs-btn rs-btn-danger" onClick={() => setDeleteOpen(true)}>
+          <button
+            type="button"
+            className="rs-btn rs-btn-danger"
+            disabled={deleting}
+            onClick={() => setDeleteOpen(true)}
+          >
             Xóa Project này...
           </button>
         </div>
@@ -970,13 +941,20 @@ const ProjectSettingsForm: React.FC<{ project: ProjectItem }> = ({ project }) =>
       <ConfirmDeleteModal
         open={deleteOpen}
         title="Xác nhận xóa Project"
-        warningText={`Bạn sắp xóa Project "${project.name}". Thao tác chỉ gỡ dữ liệu riêng của Project và giữ 100% thực thể dùng chung.`}
+        warningText={`Bạn sắp xóa Project "${project.name}". Thao tác chỉ gỡ dữ liệu riêng của Project, tạo bản sao lưu khôi phục JSON và giữ 100% thực thể dùng chung.`}
         requireExactText={project.name}
         confirmLabel="Xóa vĩnh viễn Project"
         onCancel={() => setDeleteOpen(false)}
         onConfirm={() => {
-          setDeleteOpen(false);
-          deleteProject(project.id);
+          void (async () => {
+            setDeleteOpen(false);
+            setDeleting(true);
+            try {
+              await deleteProject(project.id, project.name);
+            } finally {
+              setDeleting(false);
+            }
+          })();
         }}
       />
     </div>
@@ -985,6 +963,14 @@ const ProjectSettingsForm: React.FC<{ project: ProjectItem }> = ({ project }) =>
 
 export const ProjectSettingsScreen: React.FC = () => {
   const project = useActiveProject();
+  const { isBootstrapping } = usePrototypeWorkspace();
+  if (isBootstrapping) {
+    return (
+      <div className="rs-container">
+        <LoadingSkeletonCard label="Đang tải Cài đặt dự án..." />
+      </div>
+    );
+  }
   if (!project) return <NoProjectEmpty />;
-  return <ProjectSettingsForm key={project.id} project={project} />;
+  return <ProjectSettingsForm key={`${project.id}-${project.updatedAt}`} project={project} />;
 };

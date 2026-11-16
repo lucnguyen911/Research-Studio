@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.db.connection import run_db_sync
 from app.repositories import settings_repo
+from app.services import quota_service, retention_service
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
@@ -55,3 +56,13 @@ async def put_youtube_api_key(payload: SaveApiKeyRequest) -> dict[str, object]:
 @router.delete("/youtube-api-key")
 async def remove_youtube_api_key() -> dict[str, object]:
     return await run_db_sync(settings_repo.delete_youtube_api_key)
+
+
+@router.get("/quota")
+async def read_quota_status() -> dict[str, object]:
+    return await run_db_sync(quota_service.get_quota_status)
+
+
+@router.post("/purge-youtube-cache")
+async def purge_youtube_cache() -> dict[str, object]:
+    return await run_db_sync(retention_service.purge_all_youtube_api_data_by_user_request)

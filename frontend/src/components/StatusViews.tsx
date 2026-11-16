@@ -2,7 +2,7 @@ import React from 'react';
 import type { ScreenId } from '../prototype/types';
 import { STAGE_TWO_INFO } from '../prototype/demoData';
 import { useAppNavigation } from '../state/navigationStore';
-import { usePrototypeWorkspace } from '../state/workspaceContext';
+import { isDemoPreviewScreen, usePrototypeWorkspace } from '../state/workspaceContext';
 
 export const StageTwoScreen: React.FC<{
   screenId: keyof typeof STAGE_TWO_INFO;
@@ -57,112 +57,107 @@ export const StageTwoScreen: React.FC<{
 export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
   requiresYouTubeApi = false,
 }) => {
-  const { uiMode, setUiMode, setAutoRefreshEnabled, pushToast, apiCachePurged, restoreYouTubeCacheDemo } =
-    usePrototypeWorkspace();
-  const { navigate } = useAppNavigation();
+  const {
+    isBootstrapping,
+    backendOnline,
+    systemSettings,
+    quotaStatus,
+    refreshWorkspaceStatus,
+    setLegalModalOpen,
+  } = usePrototypeWorkspace();
+  const { currentEntry, navigate } = useAppNavigation();
+  const isPreview = isDemoPreviewScreen(currentEntry.screenId);
 
   return (
     <>
-      {uiMode === 'offline' && (
+      {isPreview && (
+        <div className="rs-banner rs-banner-amber" role="status">
+          <div>
+            <strong>Màn hình xem trước giao diện (DEMO):</strong> Phần này vẫn đang dùng dữ liệu minh họa đọc-chỉ và sẽ
+            được kết nối SQLite + API thật trong Milestone 3–5.
+          </div>
+        </div>
+      )}
+
+      {!isBootstrapping && !backendOnline && (
         <div className="rs-banner rs-banner-warn" role="status">
           <div>
-            <strong>Ngoại tuyến / Mất kết nối Internet:</strong> Không thể gọi YouTube API hoặc tải RSS mới. Dữ liệu
-            local còn hạn (&lt;= 30 ngày), RSS đã lưu và toàn bộ Kho ý tưởng vẫn xem, lọc, sắp xếp và chỉnh sửa bình thường.
+            <strong>Không kết nối được Backend cục bộ (127.0.0.1:8000):</strong> Không thể đọc/ghi SQLite hoặc gọi API mới.
+            Hãy kiểm tra tiến trình Uvicorn/FastAPI và bấm thử lại.
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => setUiMode('normal')}>
+            <button
+              type="button"
+              className="rs-btn rs-btn-sm rs-btn-secondary"
+              onClick={() => {
+                void refreshWorkspaceStatus();
+              }}
+            >
               Thử lại kết nối
             </button>
           </div>
         </div>
       )}
 
-      {requiresYouTubeApi && (uiMode === 'no_api_key' || apiCachePurged) && (
+      {requiresYouTubeApi && backendOnline && !systemSettings.legalConsentAccepted && (
         <div className="rs-banner rs-banner-warn" role="alert">
           <div>
-            {uiMode === 'no_api_key' ? (
-              <>
-                <strong>Chưa có YouTube Data API v3 Key:</strong> Các chức năng RSS, Kho ý tưởng chung và Quản lý ý
-                tưởng vẫn hoạt động 100%. Vui lòng dán API Key (lưu qua Windows DPAPI) để tra cứu YouTube.
-              </>
-            ) : (
-              <>
-                <strong>Đã xóa toàn bộ cache YouTube API Data:</strong> Tất cả dữ liệu metadata/thống kê từ YouTube API
-                đã được xóa sạch theo yêu cầu. Toàn bộ Project, Ý tưởng và nguồn RSS do bạn tạo vẫn nguyên vẹn 100%.
-              </>
-            )}
+            <strong>Chưa xác nhận Chính sách Quyền riêng tư &amp; Điều khoản YouTube:</strong> Theo yêu cầu pháp lý,
+            vui lòng đọc và xác nhận đồng ý trước khi lưu API Key hoặc gọi YouTube Data API.
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {uiMode === 'no_api_key' ? (
-              <button
-                type="button"
-                className="rs-btn rs-btn-sm rs-btn-primary"
-                onClick={() => navigate('system-settings')}
-              >
-                Mở Cài đặt API Key
-              </button>
-            ) : (
-              <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={restoreYouTubeCacheDemo}>
-                Nạp lại dữ liệu YouTube DEMO
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {requiresYouTubeApi && uiMode === 'quota_search_exhausted' && (
-        <div className="rs-banner rs-banner-danger" role="alert">
-          <div>
-            <strong>Hết hạn mức Bucket Search Queries (100/100 lượt/ngày):</strong> <code>search.list</code> đã chạm
-            trần ngày PT (ước tính reset 00:00 PT = 14:00 GMT+7). Các thao tác thuộc{' '}
-            <strong>General Data API</strong> (Xu hướng, Cập nhật kênh đối thủ đã có ID) vẫn chạy bình thường.
-          </div>
-          <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => setUiMode('normal')}>
-            Đặt lại mô phỏng quota
+          <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => setLegalModalOpen(true)}>
+            Mở xác nhận Pháp lý
           </button>
         </div>
       )}
 
-      {requiresYouTubeApi && uiMode === 'quota_general_exhausted' && (
+      {requiresYouTubeApi && backendOnline && systemSettings.apiKeyStatus === 'unreadable' && (
         <div className="rs-banner rs-banner-danger" role="alert">
           <div>
-            <strong>Hết hạn mức Bucket General Data API (10.000/10.000 units/ngày):</strong> Tạm dừng làm mới
-            YouTube tự động và thủ công tới mốc reset 00:00 PT. Bạn vẫn đọc và quản lý Ý tưởng / RSS cục bộ.
+            <strong>Không giải mã được YouTube API Key cũ (DPAPI):</strong> Có thể tệp dữ liệu được chuyển từ máy hoặc
+            tài khoản Windows khác. Hệ thống vẫn đọc dữ liệu local bình thường; vui lòng dán lại API Key mới trong Cài đặt.
           </div>
-          <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => setUiMode('normal')}>
-            Đặt lại mô phỏng quota
+          <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => navigate('system-settings')}>
+            Mở Cài đặt nhập lại API Key
           </button>
         </div>
       )}
 
-      {uiMode === 'refreshing' && (
-        <div className="rs-banner rs-banner-amber" role="status">
-          <div>
-            <strong>Đang làm mới dữ liệu nền (DEMO):</strong> Đang đồng bộ lô 2 kênh đối thủ &amp; 3 nguồn RSS (ước
-            tính 4 units General Data API · 0 lượt Search Queries). Tiến trình có thể hủy an toàn bất kỳ lúc nào.
+      {requiresYouTubeApi &&
+        backendOnline &&
+        systemSettings.legalConsentAccepted &&
+        systemSettings.apiKeyStatus === 'missing' && (
+          <div className="rs-banner rs-banner-warn" role="alert">
+            <div>
+              <strong>Chưa có YouTube Data API v3 Key:</strong> Các chức năng quản trị Project, RSS và Kho ý tưởng vẫn hoạt
+              động độc lập. Dán khóa cá nhân (mã hóa Windows DPAPI) trong Cài đặt để bật tra cứu YouTube.
+            </div>
+            <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => navigate('system-settings')}>
+              Mở Cài đặt API Key
+            </button>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              type="button"
-              className="rs-btn rs-btn-sm rs-btn-danger"
-              onClick={() => {
-                setUiMode('normal');
-                setAutoRefreshEnabled(false);
-                pushToast('success', 'Đã hủy tác vụ làm mới đang chạy.');
-              }}
-            >
-              Hủy (Cancel)
-            </button>
-            <button
-              type="button"
-              className="rs-btn rs-btn-sm rs-btn-secondary"
-              onClick={() => {
-                setUiMode('normal');
-                pushToast('success', 'Đã hoàn tất làm mới dữ liệu DEMO.');
-              }}
-            >
-              Hoàn tất ngay
-            </button>
+        )}
+
+      {requiresYouTubeApi && backendOnline && quotaStatus.searchQueries.exhausted && (
+        <div className="rs-banner rs-banner-danger" role="alert">
+          <div>
+            <strong>
+              Hết hạn mức Bucket Search Queries ({quotaStatus.searchQueries.used}/{quotaStatus.searchQueries.limit} lượt/ngày):
+            </strong>{' '}
+            <code>search.list</code> đã chạm trần ngày PT ({quotaStatus.ptDate}). Bucket{' '}
+            <strong>General Data API</strong> vẫn khả dụng bình thường.
+          </div>
+        </div>
+      )}
+
+      {requiresYouTubeApi && backendOnline && quotaStatus.generalData.exhausted && (
+        <div className="rs-banner rs-banner-danger" role="alert">
+          <div>
+            <strong>
+              Hết hạn mức Bucket General Data API ({quotaStatus.generalData.used.toLocaleString('vi-VN')}/
+              {quotaStatus.generalData.limit.toLocaleString('vi-VN')} units/ngày):
+            </strong>{' '}
+            Tạm dừng làm mới YouTube tới mốc reset 00:00 PT.
           </div>
         </div>
       )}
@@ -176,7 +171,7 @@ export const LoadingSkeletonCard: React.FC<{ label?: string }> = ({
   <section className="rs-card" aria-busy="true" aria-label={label}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
       <strong>{label}</strong>
-      <span className="rs-badge rs-badge-demo">LOADING DEMO</span>
+      <span className="rs-badge">Đang tải</span>
     </div>
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <div className="rs-skeleton-line" style={{ width: '92%' }} />

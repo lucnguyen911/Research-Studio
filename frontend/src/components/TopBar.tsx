@@ -1,8 +1,8 @@
 import React from 'react';
-import type { ScreenId, UiSimulatorMode } from '../prototype/types';
+import type { ScreenId } from '../prototype/types';
 import { DEMO_RSS_ARTICLES, DEMO_VIDEOS } from '../prototype/demoData';
 import { useAppNavigation } from '../state/navigationStore';
-import { usePrototypeWorkspace } from '../state/workspaceContext';
+import { isDemoPreviewScreen, usePrototypeWorkspace } from '../state/workspaceContext';
 
 const SCREEN_TITLES: Record<ScreenId, string> = {
   'global-overview': 'Tổng quan',
@@ -33,16 +33,17 @@ export const TopBar: React.FC = () => {
   const {
     theme,
     toggleTheme,
-    uiMode,
-    setUiMode,
+    backendOnline,
+    isBootstrapping,
+    systemSettings,
+    quotaStatus,
     projects,
     channels,
     ideas,
-    quotaSearchUsed,
-    quotaGeneralUsed,
   } = usePrototypeWorkspace();
 
   const activeProject = projects.find((p) => p.id === currentEntry.projectId) ?? projects[0] ?? null;
+  const isPreview = isDemoPreviewScreen(currentEntry.screenId);
 
   const buildCrumbs = (): Array<{ label: string; onClick?: () => void }> => {
     const sid = currentEntry.screenId;
@@ -112,15 +113,18 @@ export const TopBar: React.FC = () => {
   };
 
   const crumbs = buildCrumbs();
-  const displaySearchQuota = uiMode === 'quota_search_exhausted' ? 100 : quotaSearchUsed;
-  const displayGeneralQuota = uiMode === 'quota_general_exhausted' ? 10000 : quotaGeneralUsed;
 
-  const networkBadge =
-    uiMode === 'offline'
-      ? { label: 'Ngoại tuyến (Local)', cls: 'rs-badge rs-badge-warning' }
-      : uiMode === 'no_api_key'
-        ? { label: 'Thiếu API Key', cls: 'rs-badge rs-badge-warning' }
-        : { label: 'Online · Cache <= 30d', cls: 'rs-badge rs-badge-success' };
+  const statusBadge = isBootstrapping
+    ? { label: 'Đang kết nối SQLite...', cls: 'rs-badge' }
+    : !backendOnline
+      ? { label: 'Mất kết nối Backend', cls: 'rs-badge rs-badge-danger' }
+      : systemSettings.apiKeyStatus === 'unreadable'
+        ? { label: 'API Key lỗi giải mã', cls: 'rs-badge rs-badge-danger' }
+        : !systemSettings.legalConsentAccepted
+          ? { label: 'Chưa xác nhận Pháp lý', cls: 'rs-badge rs-badge-warning' }
+          : systemSettings.apiKeyStatus === 'missing'
+            ? { label: 'Thiếu API Key', cls: 'rs-badge rs-badge-warning' }
+            : { label: 'Local SQLite · Sẵn sàng', cls: 'rs-badge rs-badge-success' };
 
   return (
     <header className="rs-topbar">
@@ -165,41 +169,26 @@ export const TopBar: React.FC = () => {
           ))}
         </nav>
 
-        <span className="rs-badge rs-badge-demo" title="Dữ liệu mô phỏng cho Prototype Phase 6 (Gate D)">
-          DEMO
-        </span>
+        {isPreview && (
+          <span
+            className="rs-badge rs-badge-demo"
+            title="Màn hình xem trước giao diện — sẽ nối dữ liệu SQLite & API thật ở Milestone 3–5"
+          >
+            DEMO (Xem trước M3–M5)
+          </span>
+        )}
       </div>
 
       <div className="rs-topbar-right">
-        <span className={networkBadge.cls}>{networkBadge.label}</span>
+        <span className={statusBadge.cls}>{statusBadge.label}</span>
 
         <span
           className="rs-badge rs-tabular"
-          title="Ước tính quota YouTube API trên máy này · Reset 00:00 PT"
+          title={`Ước tính quota YouTube API ngày PT (${quotaStatus.ptDate}) · Reset 00:00 PT`}
         >
-          Search: {displaySearchQuota}/100 · API: {displayGeneralQuota.toLocaleString('vi-VN')}/10.000
+          Search: {quotaStatus.searchQueries.used}/{quotaStatus.searchQueries.limit} · API:{' '}
+          {quotaStatus.generalData.used.toLocaleString('vi-VN')}/{quotaStatus.generalData.limit.toLocaleString('vi-VN')}
         </span>
-
-        <select
-          id="rs-ui-mode-select"
-          name="rs_ui_mode"
-          aria-label="Mô phỏng trạng thái UI (DEMO)"
-          title="Chuyển nhanh 14 trạng thái UI bắt buộc của Phase 6"
-          className="rs-select rs-select-compact"
-          value={uiMode}
-          onChange={(e) => setUiMode(e.target.value as UiSimulatorMode)}
-        >
-          <option value="normal">UI: Bình thường</option>
-          <option value="loading">UI: Loading</option>
-          <option value="empty">UI: Empty state</option>
-          <option value="no_api_key">UI: Không có API Key</option>
-          <option value="offline">UI: Mất kết nối Internet</option>
-          <option value="quota_search_exhausted">UI: Hết quota Search (100/100)</option>
-          <option value="quota_general_exhausted">UI: Hết quota API chung</option>
-          <option value="rss_error">UI: Nguồn RSS lỗi</option>
-          <option value="insufficient_data">UI: Không đủ dữ liệu</option>
-          <option value="refreshing">UI: Đang làm mới (Cancel)</option>
-        </select>
 
         <button
           type="button"

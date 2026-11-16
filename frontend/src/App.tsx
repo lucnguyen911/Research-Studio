@@ -88,12 +88,16 @@ const ScreenOutlet: React.FC = () => {
 
 const WorkspaceShell: React.FC = () => {
   const { currentEntry, reconcileProjects } = useAppNavigation();
-  const { projects, toasts, dismissToast } = usePrototypeWorkspace();
+  const { isBootstrapping, backendOnline, projects, toasts, dismissToast, pushToast } = usePrototypeWorkspace();
   const scrollRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    reconcileProjects(projects.map((p) => p.id));
-  }, [projects, reconcileProjects]);
+    if (isBootstrapping || !backendOnline) return;
+    reconcileProjects(
+      projects.map((p) => p.id),
+      (msg) => pushToast('success', msg),
+    );
+  }, [isBootstrapping, backendOnline, projects, currentEntry.entryId, currentEntry.projectId, reconcileProjects, pushToast]);
 
   const handleScroll = useScrollContainerSync(
     scrollRef,

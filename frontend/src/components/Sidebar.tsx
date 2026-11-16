@@ -76,7 +76,7 @@ export const Sidebar: React.FC = () => {
           {!sidebarCollapsed && (
             <div style={{ minWidth: 0 }}>
               <div className="rs-brand-title">Research Studio</div>
-              <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>Local-first · DEMO</div>
+              <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>Local-first · Standard Mode</div>
             </div>
           )}
         </div>

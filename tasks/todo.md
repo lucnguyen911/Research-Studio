@@ -103,7 +103,7 @@
 
 ## Milestone 2 — UI Foundation *(Thích ứng theo thiết kế đã duyệt tại `Phase 6 — GATE D`)*
 
-### [ ] T05 — Frontend API Client (`AbortController` + CSRF Header), Theme VOXLAB, App Shell 16 Mục & Khung `G1`/`P1` Cơ bản
+### [x] T05 — Frontend API Client (`AbortController` + CSRF Header), Theme VOXLAB, App Shell 16 Mục & Khung `G1`/`P1` Cơ bản
 - **ID:** T05
 - **TITLE:** Frontend API Client (`AbortController` + CSRF Header), Theme VOXLAB, App Shell 16 Mục, Khung `G1`/`P1` Cơ bản & 5 Màn hình Giai đoạn 2
 - **GOAL:** Cài đặt API client dùng chung (tự gắn header `X-Research-Studio-Client: local-web`, chuẩn hóa lỗi & hỗ trợ `AbortController`), đưa hệ thống CSS Tokens Light/Dark VOXLAB + bố cục App Shell đã duyệt ở `GATE D` vào ứng dụng chính (Sidebar 6 mục Global + 10 mục Project, 5 màn hình Giai đoạn 2 hiển thị giải thích trung thực, kèm khung hiển thị sống ban đầu cho màn hình mặc định `G1. Tổng quan` & `P1. Tổng quan dự án` thay vì màn hình trống/stub).
@@ -126,7 +126,7 @@
 - **RISK:** MEDIUM
 - **USER APPROVAL REQUIRED:** NO *(Do `GATE D` đã được duyệt trước khi mở Phase 7 Build).*
 
-### [ ] T06 — Bộ Điều hướng Hợp nhất (`AppNavigationProvider` Bền vững qua `F5`), Project Selector Duy nhất & Khôi phục `Scroll` Bất đồng bộ
+### [x] T06 — Bộ Điều hướng Hợp nhất (`AppNavigationProvider` Bền vững qua `F5`), Project Selector Duy nhất & Khôi phục `Scroll` Bất đồng bộ
 - **ID:** T06
 - **TITLE:** Bộ Điều hướng Hợp nhất (`AppNavigationProvider` Bền vững qua `F5`), Project Selector Duy nhất & Khôi phục `Filters / Sort / Scroll` Bất đồng bộ
 - **GOAL:** Triển khai `AppNavigationProvider` hợp nhất nguyên tử `(route, detailParams, activeProjectId)` trong một reducer + Dropdown Project duy nhất, đồng bộ URL hash + metadata nhẹ (`filters`, `sort`, `tab`, `loadedPage`, `scrollTop` — không lưu danh sách API data) qua `sessionStorage` + `window.history` (`scrollRestoration = 'manual'`), tự động khôi phục số trang đã nạp trước khi đặt `scrollTop` trong `requestAnimationFrame` sau tải bất đồng bộ, hủy request cũ bằng `AbortController` và tự điều hướng an toàn khi Back vào Project đã xóa.
@@ -146,7 +146,7 @@
 - **RISK:** HIGH
 - **USER APPROVAL REQUIRED:** NO
 
-### [ ] T07 — Giao diện Cài đặt Hệ thống, Công bố Pháp lý YouTube (`ToS & Privacy` + Xóa Cache) & `P6. Cài đặt dự án` Cơ bản
+### [x] T07 — Giao diện Cài đặt Hệ thống, Công bố Pháp lý YouTube (`ToS & Privacy` + Xóa Cache) & `P6. Cài đặt dự án` Cơ bản
 - **ID:** T07
 - **TITLE:** Giao diện Cài đặt Hệ thống, Công bố Pháp lý YouTube (`ToS & Privacy` + Xóa Cache) & `P6. Cài đặt dự án` Cơ bản
 - **GOAL:** Hoàn thiện màn hình *Cài đặt hệ thống chung & Pháp lý* (lưu/kiểm tra/xóa API Key dạng che, xử lý thông báo nếu khóa cũ không giải mã được, hộp thoại xác nhận Chính sách Quyền riêng tư lần đầu, liên kết YouTube ToS `https://www.youtube.com/t/terms` & Google Privacy Policy, nút Xóa toàn bộ cache YouTube API ngay lập tức, công tắc Làm mới tự động, ngưỡng quota 2 bucket) và phần cấu hình cơ bản của `P6. Cài đặt dự án` (thông số vùng/ngôn ngữ/định dạng, tải JSON Project đọc-chỉ, xóa Project có gõ đúng tên xác nhận). *(Phần gắn/gỡ nguồn RSS cho Project trên `P6` được nối bổ sung ngay trong `T11`).*
@@ -165,14 +165,14 @@
 - **USER APPROVAL REQUIRED:** NO
 
 ### Checkpoint M2 — UI Foundation (Runnable Desktop Shell)
-- [ ] `typecheck`, `lint`, `vite build` đạt `0` lỗi/cảnh báo; Backend test pass 100%.
-- [ ] Mở `http://127.0.0.1:5173` qua Chrome DevTools MCP xác nhận vỏ app VOXLAB (Light/Dark), 16 mục Sidebar, 1 Dropdown Project, Back/Forward/`F5`, Cài đặt hệ thống & Pháp lý và `P6` chạy thật với SQLite.
+- [x] `typecheck`, `lint`, `vite build` đạt `0` lỗi/cảnh báo; Backend test pass 100%.
+- [x] Mở `http://127.0.0.1:5173` qua Chrome DevTools MCP xác nhận vỏ app VOXLAB (Light/Dark), 16 mục Sidebar, 1 Dropdown Project, Back/Forward/`F5`, Cài đặt hệ thống & Pháp lý và `P6` chạy thật với SQLite.
 
 ---
 
 ## Milestone 3 — Research Data
 
-### [ ] T08 — Sổ cái Quota 2 Bucket Nguyên tử (`America/Los_Angeles`), Phân loại 3 Lớp Định dạng & Bộ Quản lý Hạn 30 Ngày
+### [x] T08 — Sổ cái Quota 2 Bucket Nguyên tử (`America/Los_Angeles`), Phân loại 3 Lớp Định dạng & Bộ Quản lý Hạn 30 Ngày
 - **ID:** T08
 - **TITLE:** Sổ cái Quota 2 Bucket Nguyên tử (`America/Los_Angeles`), Phân loại 3 Lớp Định dạng & Bộ Quản lý Hạn Lưu trữ 30 Ngày
 - **GOAL:** Xây dựng 3 engine chuẩn của Research Studio: (1) `quota_repo.py` + `quota_service.py` dùng `ZoneInfo("America/Los_Angeles")` (tính mốc reset `00:00 PT` chính xác qua DST) với cơ chế đặt trước nguyên tử trong `BEGIN IMMEDIATE`; (2) `format_classifier.py` thuần Python phân tách 3 lớp (`source_format_status`: `long_form`/`shorts`/`unknown` cấm ngưỡng `60s`, + `format_hint` kèm độ tin cậy & căn cứ, + tách biệt nhãn thủ công); (3) `youtube_repo.py` + `retention_service.py` dọn `YouTube API Data` quá 30 ngày lịch (tombstone toàn bộ cột API cho bản ghi còn liên kết người dùng, chỉ xóa dòng kênh nếu không còn `youtube_videos` hay liên kết nào) và xóa backup `.db` chứa API Data khi người dùng yêu cầu xóa.

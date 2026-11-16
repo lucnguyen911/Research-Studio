@@ -7,27 +7,31 @@ import { FormatBadgeGroup } from './FormatBadgeGroup';
 import { SparklineCell } from './SparklineCell';
 
 export const CreateProjectModal: React.FC = () => {
-  const { createProjectModalOpen, setCreateProjectModalOpen, createProject } = usePrototypeWorkspace();
+  const { createProjectModalOpen, setCreateProjectModalOpen, createProject, systemSettings } =
+    usePrototypeWorkspace();
   const { switchProject } = useAppNavigation();
   const [name, setName] = useState('');
-  const [regionCode, setRegionCode] = useState('VN');
-  const [relevanceLanguage, setRelevanceLanguage] = useState('vi');
+  const [description, setDescription] = useState('');
+  const [regionCode, setRegionCode] = useState(systemSettings.defaultRegionCode || 'VN');
+  const [relevanceLanguage, setRelevanceLanguage] = useState(systemSettings.defaultRelevanceLanguage || 'vi');
   const [targetFormat, setTargetFormat] = useState<ProjectItem['targetFormat']>('all');
+  const [submitting, setSubmitting] = useState(false);
 
   if (!createProjectModalOpen) return null;
 
-  const canSave = name.trim().length > 0;
+  const canSave = name.trim().length > 0 && !submitting;
 
   return (
     <div className="rs-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="create-proj-title">
       <div className="rs-modal">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 id="create-proj-title" style={{ margin: 0, fontSize: '17px' }}>
-            Tạo Project mới (DEMO)
+            Tạo Project mới
           </h2>
           <button
             type="button"
             className="rs-btn rs-btn-ghost rs-btn-sm"
+            disabled={submitting}
             onClick={() => setCreateProjectModalOpen(false)}
           >
             Đóng
@@ -42,6 +46,16 @@ export const CreateProjectModal: React.FC = () => {
             placeholder="Ví dụ: Kênh Review Công cụ AI"
             value={name}
             onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontWeight: 600 }}>Mô tả định hướng kênh</span>
+          <textarea
+            className="rs-textarea"
+            placeholder="Mục tiêu chủ đề, nhóm khán giả, định dạng chính..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
           />
         </label>
 
@@ -79,6 +93,7 @@ export const CreateProjectModal: React.FC = () => {
           <button
             type="button"
             className="rs-btn rs-btn-secondary"
+            disabled={submitting}
             onClick={() => setCreateProjectModalOpen(false)}
           >
             Hủy
@@ -88,13 +103,29 @@ export const CreateProjectModal: React.FC = () => {
             className="rs-btn rs-btn-primary"
             disabled={!canSave}
             onClick={() => {
-              const created = createProject({ name, regionCode, relevanceLanguage, targetFormat });
-              setCreateProjectModalOpen(false);
-              setName('');
-              switchProject(created.id);
+              void (async () => {
+                setSubmitting(true);
+                try {
+                  const created = await createProject({
+                    name,
+                    description,
+                    regionCode,
+                    relevanceLanguage,
+                    targetFormat,
+                  });
+                  if (created) {
+                    setCreateProjectModalOpen(false);
+                    setName('');
+                    setDescription('');
+                    switchProject(created.id);
+                  }
+                } finally {
+                  setSubmitting(false);
+                }
+              })();
             }}
           >
-            Tạo Project &amp; Chuyển sang Project này
+            {submitting ? 'Đang lưu...' : 'Tạo Project & Chuyển sang Project này'}
           </button>
         </div>
       </div>
@@ -288,7 +319,8 @@ export const ConfirmDeleteModal: React.FC<{
 };
 
 export const LegalConsentModal: React.FC = () => {
-  const { legalModalOpen, setLegalModalOpen, setLegalAccepted, pushToast } = usePrototypeWorkspace();
+  const { legalModalOpen, setLegalModalOpen, acceptLegalConsent, systemSettings } = usePrototypeWorkspace();
+  const [submitting, setSubmitting] = useState(false);
   if (!legalModalOpen) return null;
 
   return (
@@ -305,14 +337,14 @@ export const LegalConsentModal: React.FC = () => {
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             <li>
               Sử dụng tính năng YouTube đồng nghĩa bạn đồng ý chịu sự ràng buộc của{' '}
-              <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">
+              <a href={systemSettings.legalLinks.youtubeTosUrl} target="_blank" rel="noreferrer">
                 YouTube Terms of Service
               </a>
               .
             </li>
             <li>
               Xem thêm{' '}
-              <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">
+              <a href={systemSettings.legalLinks.googlePrivacyUrl} target="_blank" rel="noreferrer">
                 Google Privacy Policy
               </a>
               .
@@ -324,19 +356,33 @@ export const LegalConsentModal: React.FC = () => {
           </ul>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button type="button" className="rs-btn rs-btn-secondary" onClick={() => setLegalModalOpen(false)}>
+          <button
+            type="button"
+            className="rs-btn rs-btn-secondary"
+            disabled={submitting}
+            onClick={() => setLegalModalOpen(false)}
+          >
             Đóng
           </button>
           <button
             type="button"
             className="rs-btn rs-btn-primary"
+            disabled={submitting}
             onClick={() => {
-              setLegalAccepted(true);
-              setLegalModalOpen(false);
-              pushToast('success', 'Đã xác nhận đồng ý Chính sách Quyền riêng tư.');
+              void (async () => {
+                setSubmitting(true);
+                try {
+                  const ok = await acceptLegalConsent(true);
+                  if (ok) {
+                    setLegalModalOpen(false);
+                  }
+                } finally {
+                  setSubmitting(false);
+                }
+              })();
             }}
           >
-            Tôi đã đọc &amp; Đồng ý
+            {submitting ? 'Đang lưu...' : 'Tôi đã đọc & Đồng ý'}
           </button>
         </div>
       </div>

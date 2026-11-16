@@ -9,8 +9,9 @@ import type { IdeaStatus } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
 import { usePrototypeWorkspace } from '../state/workspaceContext';
 import { FormatBadgeGroup } from '../components/FormatBadgeGroup';
+import { ConfirmDeleteModal } from '../components/Modals';
 import { SparklineCell } from '../components/SparklineCell';
-import { GlobalModeBanners } from '../components/StatusViews';
+import { GlobalModeBanners, LoadingSkeletonCard } from '../components/StatusViews';
 import { VideoResearchTable } from '../components/VideoResearchTable';
 
 export const ChannelDetailScreen: React.FC = () => {
@@ -547,43 +548,83 @@ const ProjectLinkEditorCard: React.FC<{
   );
 };
 
-export const SystemSettingsScreen: React.FC = () => {
+const SystemSettingsForm: React.FC = () => {
   const {
     theme,
     setTheme,
-    maskedApiKey,
-    saveApiKeyDemo,
-    autoRefreshEnabled,
-    setAutoRefreshEnabled,
-    purgeYouTubeCacheDemo,
-    legalAccepted,
+    systemSettings,
+    saveApiKey,
+    removeApiKey,
+    updateSystemPreferences,
+    purgeYoutubeCache,
     setLegalModalOpen,
-    pushToast,
   } = usePrototypeWorkspace();
+
   const [rawKeyInput, setRawKeyInput] = useState('');
+  const [regionCode, setRegionCode] = useState(systemSettings.defaultRegionCode);
+  const [relevanceLanguage, setRelevanceLanguage] = useState(systemSettings.defaultRelevanceLanguage);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(systemSettings.autoRefreshEnabled);
+  const [channelHours, setChannelHours] = useState(String(systemSettings.autoRefreshChannelIntervalHours));
+  const [rssHours, setRssHours] = useState(String(systemSettings.autoRefreshRssIntervalHours));
+  const [batchCap, setBatchCap] = useState(String(systemSettings.autoRefreshMaxApiUnitsPerBatch));
+  const [dailyCap, setDailyCap] = useState(String(systemSettings.autoRefreshDailyQuotaCap));
+  const [warnPct, setWarnPct] = useState(String(Math.round(systemSettings.quotaWarningRatio * 100)));
+  const [savingKey, setSavingKey] = useState(false);
+  const [savingPrefs, setSavingPrefs] = useState(false);
+  const [purgeConfirmOpen, setPurgeConfirmOpen] = useState(false);
+  const [purging, setPurging] = useState(false);
+
+  const keyStatusBadge =
+    systemSettings.apiKeyStatus === 'configured'
+      ? { label: `Đã mã hóa DPAPI (${systemSettings.maskedApiKey ?? 'ẩn'})`, cls: 'rs-badge rs-badge-success' }
+      : systemSettings.apiKeyStatus === 'unreadable'
+        ? { label: 'Không giải mã được khóa cũ (DPAPI)', cls: 'rs-badge rs-badge-danger' }
+        : { label: 'Chưa cấu hình API Key', cls: 'rs-badge rs-badge-warning' };
 
   return (
     <div className="rs-container">
       <div className="rs-page-header">
         <div>
-          <h1 className="rs-page-title">Cài đặt hệ thống chung &amp; Pháp lý</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <h1 className="rs-page-title">Cài đặt hệ thống chung &amp; Pháp lý</h1>
+            <span className="rs-badge rs-badge-success">Dữ liệu thật SQLite + Windows DPAPI</span>
+          </div>
           <p className="rs-page-subtitle">
-            Cấu hình YouTube API Key (DPAPI), làm mới tự động có kiểm soát, giao diện Light/Dark và công bố pháp lý
+            Cấu hình YouTube API Key (mã hóa Windows DPAPI), tham số làm mới tự động, giao diện Light/Dark và công bố pháp lý
           </p>
         </div>
       </div>
 
+      <GlobalModeBanners />
+
       <div className="rs-grid-2">
         <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <h2 style={{ margin: 0, fontSize: '15.5px' }}>YouTube Data API v3 Key (Windows DPAPI)</h2>
-          <div style={{ fontSize: '13px', color: 'var(--rs-text-secondary)' }}>
-            Trạng thái hiện tại: <code className="rs-mono">{maskedApiKey}</code> (mã hóa cục bộ, không trả khóa thô xuống trình duyệt).
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <h2 style={{ margin: 0, fontSize: '15.5px' }}>YouTube Data API v3 Key (Windows DPAPI)</h2>
+            <span className={keyStatusBadge.cls}>{keyStatusBadge.label}</span>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+
+          {!systemSettings.legalConsentAccepted && (
+            <div className="rs-card-subtle" style={{ fontSize: '13px' }}>
+              Cần bấm <strong>Xác nhận Chính sách Quyền riêng tư &amp; Điều khoản YouTube</strong> ở khung phía dưới
+              trước khi hệ thống cho phép lưu API Key.
+            </div>
+          )}
+
+          {systemSettings.apiKeyStatus === 'unreadable' && (
+            <div className="rs-banner rs-banner-danger" role="alert">
+              <div>
+                Khóa API mã hóa DPAPI trước đây không thể giải mã trên tài khoản Windows hiện tại. Hãy dán lại khóa mới
+                hoặc bấm Xóa khóa lỗi bên dưới.
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input
               type="password"
               className="rs-input"
-              style={{ flex: 1 }}
+              style={{ flex: 1, minWidth: 220 }}
               placeholder="Dán YouTube Data API v3 Key mới..."
               value={rawKeyInput}
               onChange={(e) => setRawKeyInput(e.target.value)}
@@ -591,16 +632,49 @@ export const SystemSettingsScreen: React.FC = () => {
             <button
               type="button"
               className="rs-btn rs-btn-primary"
-              disabled={!rawKeyInput.trim()}
+              disabled={!rawKeyInput.trim() || !systemSettings.legalConsentAccepted || savingKey}
               onClick={() => {
-                saveApiKeyDemo(rawKeyInput);
-                setRawKeyInput('');
+                void (async () => {
+                  setSavingKey(true);
+                  try {
+                    const ok = await saveApiKey(rawKeyInput);
+                    if (ok) {
+                      setRawKeyInput('');
+                    }
+                  } finally {
+                    setSavingKey(false);
+                  }
+                })();
               }}
             >
-              Lưu &amp; Kiểm tra
+              {savingKey ? 'Đang mã hóa...' : 'Lưu API Key (DPAPI)'}
             </button>
+            {systemSettings.apiKeyStatus !== 'missing' && (
+              <button
+                type="button"
+                className="rs-btn rs-btn-danger"
+                disabled={savingKey}
+                onClick={() => {
+                  void (async () => {
+                    setSavingKey(true);
+                    try {
+                      await removeApiKey();
+                    } finally {
+                      setSavingKey(false);
+                    }
+                  })();
+                }}
+              >
+                Xóa Key
+              </button>
+            )}
           </div>
-          <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
+
+          <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>
+            Backend mã hóa bằng Win32 DPAPI (`CryptProtectData`), chỉ trả chuỗi đã che và không bao giờ đưa khóa thô lên trình duyệt.
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, paddingTop: 4, flexWrap: 'wrap' }}>
             <button type="button" className="rs-btn rs-btn-secondary rs-btn-sm" onClick={() => setTheme('light')}>
               ☀ Giao diện Light Mode (Mặc định) {theme === 'light' ? '✓' : ''}
             </button>
@@ -616,21 +690,115 @@ export const SystemSettingsScreen: React.FC = () => {
             <input
               type="checkbox"
               checked={autoRefreshEnabled}
-              onChange={(e) => {
-                setAutoRefreshEnabled(e.target.checked);
-                pushToast(
-                  'success',
-                  e.target.checked
-                    ? 'Đã bật Tự động làm mới khi mở app (0 lượt Search Queries).'
-                    : 'Đã tắt Tự động làm mới (vẫn dọn TTL 30 ngày tại local).',
-                );
-              }}
+              onChange={(e) => setAutoRefreshEnabled(e.target.checked)}
             />
-            <span>Cho phép Tự động làm mới có kiểm soát khi ứng dụng đang mở</span>
+            <span>Cho phép Tự động làm mới có kiểm soát khi ứng dụng đang mở (0 lượt Search Queries)</span>
           </label>
-          <div style={{ fontSize: '13px', color: 'var(--rs-text-secondary)' }}>
-            Ngưỡng cảnh báo mặc định: <strong>80%</strong> (<code>80/100</code> Search Queries &amp; <code>8.000/10.000</code> General Data API).
-            Trần tự động ngày: <code>3.000 units</code> · <code>0</code> lượt <code>search.list</code>.
+
+          <div className="rs-grid-3">
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Quốc gia mặc định</span>
+              <select className="rs-select" value={regionCode} onChange={(e) => setRegionCode(e.target.value)}>
+                <option value="VN">VN</option>
+                <option value="US">US</option>
+                <option value="JP">JP</option>
+              </select>
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Ngôn ngữ mặc định</span>
+              <select className="rs-select" value={relevanceLanguage} onChange={(e) => setRelevanceLanguage(e.target.value)}>
+                <option value="vi">vi</option>
+                <option value="en">en</option>
+              </select>
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Ngưỡng cảnh báo (%)</span>
+              <input
+                type="number"
+                min={10}
+                max={99}
+                className="rs-input"
+                value={warnPct}
+                onChange={(e) => setWarnPct(e.target.value)}
+              />
+            </label>
+          </div>
+
+          <div className="rs-grid-2">
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Chu kỳ kênh đối thủ (giờ)</span>
+              <input
+                type="number"
+                min={1}
+                max={168}
+                className="rs-input"
+                value={channelHours}
+                onChange={(e) => setChannelHours(e.target.value)}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Chu kỳ nguồn RSS (giờ)</span>
+              <input
+                type="number"
+                min={1}
+                max={168}
+                className="rs-input"
+                value={rssHours}
+                onChange={(e) => setRssHours(e.target.value)}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Trần units / đợt chạy nền</span>
+              <input
+                type="number"
+                min={1}
+                max={200}
+                className="rs-input"
+                value={batchCap}
+                onChange={(e) => setBatchCap(e.target.value)}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Trần units tự động / ngày</span>
+              <input
+                type="number"
+                min={10}
+                max={10000}
+                className="rs-input"
+                value={dailyCap}
+                onChange={(e) => setDailyCap(e.target.value)}
+              />
+            </label>
+          </div>
+
+          <div>
+            <button
+              type="button"
+              className="rs-btn rs-btn-secondary"
+              disabled={savingPrefs}
+              onClick={() => {
+                void (async () => {
+                  setSavingPrefs(true);
+                  try {
+                    const parsedRatio = Math.min(0.99, Math.max(0.1, (Number(warnPct) || 80) / 100));
+                    await updateSystemPreferences({
+                      defaultRegionCode: regionCode,
+                      defaultRelevanceLanguage: relevanceLanguage,
+                      autoRefreshEnabled,
+                      autoRefreshChannelIntervalHours: Math.max(1, Number(channelHours) || 12),
+                      autoRefreshRssIntervalHours: Math.max(1, Number(rssHours) || 4),
+                      autoRefreshMaxApiUnitsPerBatch: Math.max(1, Number(batchCap) || 15),
+                      autoRefreshDailyQuotaCap: Math.max(10, Number(dailyCap) || 3000),
+                      quotaWarningRatio: parsedRatio,
+                    });
+                  } finally {
+                    setSavingPrefs(false);
+                  }
+                })();
+              }}
+            >
+              {savingPrefs ? 'Đang lưu...' : 'Lưu tham số cấu hình xuống SQLite'}
+            </button>
           </div>
         </section>
       </div>
@@ -638,18 +806,20 @@ export const SystemSettingsScreen: React.FC = () => {
       <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <h2 style={{ margin: 0, fontSize: '16px' }}>Điều khoản sử dụng, Chính sách Quyền riêng tư &amp; Xóa cache YouTube API</h2>
-          <span className={`rs-badge ${legalAccepted ? 'rs-badge-success' : 'rs-badge-warning'}`}>
-            {legalAccepted ? 'Đã xác nhận Quyền riêng tư' : 'Chưa xác nhận'}
+          <span className={`rs-badge ${systemSettings.legalConsentAccepted ? 'rs-badge-success' : 'rs-badge-warning'}`}>
+            {systemSettings.legalConsentAccepted
+              ? `Đã xác nhận (${systemSettings.legalConsentAcceptedAt ?? ''})`
+              : 'Chưa xác nhận'}
           </span>
         </div>
         <p style={{ margin: 0, fontSize: '13.5px', color: 'var(--rs-text-secondary)' }}>
           Research Studio sử dụng <strong>YouTube API Services</strong> cục bộ (0% Telemetry). Sử dụng tính năng YouTube
           đồng nghĩa tuân theo{' '}
-          <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">
+          <a href={systemSettings.legalLinks.youtubeTosUrl} target="_blank" rel="noreferrer">
             YouTube Terms of Service
           </a>{' '}
           và{' '}
-          <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">
+          <a href={systemSettings.legalLinks.googlePrivacyUrl} target="_blank" rel="noreferrer">
             Google Privacy Policy
           </a>
           . Dữ liệu từ YouTube API lưu tối đa 30 ngày lịch.
@@ -658,11 +828,47 @@ export const SystemSettingsScreen: React.FC = () => {
           <button type="button" className="rs-btn rs-btn-secondary" onClick={() => setLegalModalOpen(true)}>
             Mở hộp thoại xác nhận Chính sách Quyền riêng tư
           </button>
-          <button type="button" className="rs-btn rs-btn-danger" onClick={purgeYouTubeCacheDemo}>
-            Xóa toàn bộ cache YouTube API Data ngay lập tức
+          <button
+            type="button"
+            className="rs-btn rs-btn-danger"
+            disabled={purging}
+            onClick={() => setPurgeConfirmOpen(true)}
+          >
+            {purging ? 'Đang xóa cache...' : 'Xóa toàn bộ cache YouTube API Data ngay lập tức'}
           </button>
         </div>
       </section>
+
+      <ConfirmDeleteModal
+        open={purgeConfirmOpen}
+        title="Xóa toàn bộ dữ liệu đệm YouTube API ngay lập tức?"
+        warningText="Thao tác sẽ xóa sạch toàn bộ metadata/thống kê video & kênh từ YouTube API (bao gồm các bản sao lưu .db cũ chứa cache). Toàn bộ Project, Ý tưởng, Từ khóa, Nhãn thủ công và RSS do bạn tạo được bảo toàn 100%."
+        confirmLabel="Xóa sạch cache YouTube API"
+        onCancel={() => setPurgeConfirmOpen(false)}
+        onConfirm={() => {
+          void (async () => {
+            setPurgeConfirmOpen(false);
+            setPurging(true);
+            try {
+              await purgeYoutubeCache();
+            } finally {
+              setPurging(false);
+            }
+          })();
+        }}
+      />
     </div>
   );
+};
+
+export const SystemSettingsScreen: React.FC = () => {
+  const { isBootstrapping, systemSettings } = usePrototypeWorkspace();
+  if (isBootstrapping) {
+    return (
+      <div className="rs-container">
+        <LoadingSkeletonCard label="Đang nạp Cài đặt hệ thống & Pháp lý..." />
+      </div>
+    );
+  }
+  return <SystemSettingsForm key={systemSettings.updatedAt ?? 'default-settings'} />;
 };
