@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ApiClientError,
   addProjectCompetitorApi,
@@ -18,6 +18,7 @@ import {
   fetchRssFeedsApi,
   fetchSystemSettings,
   isAbortError,
+  isNetworkUnreachableError,
   purgeYoutubeCacheApi,
   refreshAllRssFeedsApi,
   refreshSingleRssFeedApi,
@@ -178,18 +179,95 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
   const [createProjectModalOpen, setCreateProjectModalOpen] = useState(false);
   const [legalModalOpen, setLegalModalOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastNotice[]>([]);
+  const activeToastsRef = useRef<ToastNotice[]>([]);
+  const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     applyThemeToDom(theme);
   }, [theme]);
 
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+  useEffect(() => {
+    const timers = toastTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) {
+        clearTimeout(timer);
+      }
+      timers.clear();
+    };
   }, []);
 
-  const pushToast = useCallback((kind: 'success' | 'error', message: string) => {
-    const id = `toast-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    setToasts((prev) => [...prev.slice(-3), { id, kind, message }]);
+  const dismissToast = useCallback((id: string) => {
+    const existingTimer = toastTimersRef.current.get(id);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      toastTimersRef.current.delete(id);
+    }
+    const next = activeToastsRef.current.filter((t) => t.id !== id);
+    activeToastsRef.current = next;
+    setToasts(next);
+  }, []);
+
+  const scheduleToastDismiss = useCallback(
+    (id: string, kind: 'success' | 'error') => {
+      const prevTimer = toastTimersRef.current.get(id);
+      if (prevTimer) {
+        clearTimeout(prevTimer);
+      }
+      const timeoutMs = kind === 'error' ? 6000 : 4200;
+      const timer = setTimeout(() => {
+        dismissToast(id);
+      }, timeoutMs);
+      toastTimersRef.current.set(id, timer);
+    },
+    [dismissToast],
+  );
+
+  const pushToast = useCallback(
+    (kind: 'success' | 'error', message: string) => {
+      if (kind === 'error' && message === 'Không kết nối được dịch vụ dữ liệu cục bộ.') {
+        setBackendOnline(false);
+      }
+      const duplicate = activeToastsRef.current.find((t) => t.kind === kind && t.message === message);
+      if (duplicate) {
+        scheduleToastDismiss(duplicate.id, kind);
+        return;
+      }
+      const id = `toast-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      const trimmed = activeToastsRef.current.slice(-3);
+      for (const dropped of activeToastsRef.current) {
+        if (!trimmed.includes(dropped)) {
+          const t = toastTimersRef.current.get(dropped.id);
+          if (t) {
+            clearTimeout(t);
+            toastTimersRef.current.delete(dropped.id);
+          }
+        }
+      }
+      const next = [...trimmed, { id, kind, message }];
+      activeToastsRef.current = next;
+      setToasts(next);
+      scheduleToastDismiss(id, kind);
+    },
+    [scheduleToastDismiss],
+  );
+
+  const clearNetworkErrorToasts = useCallback(() => {
+    const remaining = activeToastsRef.current.filter(
+      (t) => !(t.kind === 'error' && t.message === 'Không kết nối được dịch vụ dữ liệu cục bộ.'),
+    );
+    if (remaining.length !== activeToastsRef.current.length) {
+      for (const removed of activeToastsRef.current) {
+        if (!remaining.includes(removed)) {
+          const t = toastTimersRef.current.get(removed.id);
+          if (t) {
+            clearTimeout(t);
+            toastTimersRef.current.delete(removed.id);
+          }
+        }
+      }
+      activeToastsRef.current = remaining;
+      setToasts(remaining);
+    }
   }, []);
 
   useEffect(() => {
@@ -211,6 +289,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         setThemeState(settingsRes.themeMode);
         applyThemeToDom(settingsRes.themeMode);
         setBackendOnline(true);
+        clearNetworkErrorToasts();
         setLastSyncAt(new Date().toLocaleTimeString('vi-VN'));
         setIsBootstrapping(false);
       })
@@ -222,7 +301,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [clearNetworkErrorToasts]);
 
   const syncQuotaStatus = useCallback(async (): Promise<void> => {
     try {
@@ -251,6 +330,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
       setThemeState(settingsRes.themeMode);
       applyThemeToDom(settingsRes.themeMode);
       setBackendOnline(true);
+      clearNetworkErrorToasts();
       setLastSyncAt(new Date().toLocaleTimeString('vi-VN'));
       return true;
     } catch (err) {
@@ -260,12 +340,12 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
     } finally {
       setIsBootstrapping(false);
     }
-  }, []);
+  }, [clearNetworkErrorToasts]);
 
   const refreshWorkspaceStatus = useCallback(async (): Promise<boolean> => {
     const ok = await syncFromBackend();
     if (!ok) {
-      pushToast('error', 'Không thể kết nối tới Backend cục bộ (127.0.0.1:8000).');
+      pushToast('error', 'Không kết nối được dịch vụ dữ liệu cục bộ.');
     }
     return ok;
   }, [pushToast, syncFromBackend]);
@@ -278,14 +358,18 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         .then((updated) => {
           setSystemSettings(updated);
           setBackendOnline(true);
+          clearNetworkErrorToasts();
         })
         .catch((err) => {
-          if (!isAbortError(err)) {
-            pushToast('error', formatErrorToast(err, 'Không lưu được chủ đề giao diện lên SQLite.'));
+          if (isAbortError(err)) return;
+          if (isNetworkUnreachableError(err)) {
+            setBackendOnline(false);
+            return;
           }
+          pushToast('error', formatErrorToast(err, 'Không lưu được chủ đề giao diện.'));
         });
     },
-    [pushToast],
+    [clearNetworkErrorToasts, pushToast],
   );
 
   const toggleTheme = useCallback(() => {

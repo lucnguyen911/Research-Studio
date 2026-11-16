@@ -64,6 +64,10 @@ export function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
+export function isNetworkUnreachableError(error: unknown): boolean {
+  return error instanceof ApiClientError && error.code === 'NETWORK_UNREACHABLE';
+}
+
 function buildHeaders(_method: string, extra?: HeadersInit): Headers {
   const headers = new Headers(extra);
   if (!headers.has('Accept')) {
@@ -87,10 +91,10 @@ async function parseErrorResponse(response: Response): Promise<ApiClientError> {
   } catch {
     // Non-JSON error body (e.g. Vite proxy error when local backend is stopped)
   }
-  if (response.status === 502 || response.status === 504) {
+  if (response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504) {
     return new ApiClientError(
       'NETWORK_UNREACHABLE',
-      'Không kết nối được tới dịch vụ Backend cục bộ (127.0.0.1:8000).',
+      'Không kết nối được dịch vụ dữ liệu cục bộ.',
       response.status,
     );
   }
@@ -131,7 +135,7 @@ export async function apiRequest<T>(
     }
     throw new ApiClientError(
       'NETWORK_UNREACHABLE',
-      'Không thể kết nối tới Backend cục bộ hoặc mất mạng.',
+      'Không kết nối được dịch vụ dữ liệu cục bộ.',
       0,
     );
   }
@@ -157,7 +161,7 @@ export async function apiDownloadFile(
     });
   } catch (err) {
     if (isAbortError(err)) throw err;
-    throw new ApiClientError('NETWORK_UNREACHABLE', 'Không thể tải tệp từ Backend cục bộ.', 0);
+    throw new ApiClientError('NETWORK_UNREACHABLE', 'Không kết nối được dịch vụ dữ liệu cục bộ.', 0);
   }
 
   if (!response.ok) {
