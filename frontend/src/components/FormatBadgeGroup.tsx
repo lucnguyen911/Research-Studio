@@ -19,14 +19,28 @@ export const FormatBadgeGroup: React.FC<FormatBadgeGroupProps> = ({
 
   const sourceBadge =
     video.sourceFormatStatus === 'long_form'
-      ? { label: 'Video dài (Xác minh nguồn)', cls: 'rs-badge rs-badge-success' }
+      ? {
+          label: 'Video dài',
+          cls: 'rs-badge rs-badge-success',
+          title: 'Xác minh trực tiếp từ nguồn YouTube',
+        }
       : video.sourceFormatStatus === 'shorts'
-        ? { label: 'Shorts (Xác minh nguồn)', cls: 'rs-badge rs-badge-warning' }
-        : { label: 'Chưa xác định (<= 180s)', cls: 'rs-badge' };
+        ? {
+            label: 'Shorts',
+            cls: 'rs-badge rs-badge-warning',
+            title: 'Xác minh trực tiếp từ nguồn YouTube',
+          }
+        : {
+            label: 'Chưa rõ định dạng',
+            cls: 'rs-badge',
+            title: 'Video ≤ 3 phút chưa xác định định dạng từ nguồn YouTube',
+          };
+
+  const hintTitle = `Gợi ý: ${video.formatHint ?? ''} · Độ tin cậy: ${video.formatHintConfidence ?? '—'} · Căn cứ: ${video.formatHintBasis ?? 'Không có'}`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-      <span className={sourceBadge.cls} title="Lớp 1: Trạng thái xác minh trực tiếp từ nguồn YouTube API">
+      <span className={sourceBadge.cls} title={sourceBadge.title}>
         {sourceBadge.label}
       </span>
 
@@ -34,9 +48,10 @@ export const FormatBadgeGroup: React.FC<FormatBadgeGroupProps> = ({
         <span
           className="rs-badge"
           style={{ fontSize: '12px', fontWeight: 500 }}
-          title={`Căn cứ: ${video.formatHintBasis ?? 'Không có'}`}
+          title={hintTitle}
         >
-          Gợi ý: {video.formatHint} ({video.formatHintConfidence})
+          Gợi ý: {video.formatHint}
+          {!compact && video.formatHintConfidence ? ` (${video.formatHintConfidence})` : ''}
         </span>
       )}
 
@@ -46,9 +61,9 @@ export const FormatBadgeGroup: React.FC<FormatBadgeGroupProps> = ({
         </span>
       )}
 
-      {manualLabel !== 'none' && (
-        <span className="rs-badge rs-badge-demo" title="Lớp 3: Nhãn thủ công của bạn — không ghi đè dữ liệu nguồn API">
-          Nhãn thủ công: {manualLabel === 'long_form' ? 'Video dài' : 'Shorts'}
+      {manualLabel !== 'none' && (!compact || !showManualControl) && (
+        <span className="rs-badge rs-badge-demo" title="Nhãn thủ công của bạn — tách biệt với dữ liệu nguồn YouTube">
+          Thủ công: {manualLabel === 'long_form' ? 'Video dài' : 'Shorts'}
         </span>
       )}
 
@@ -70,9 +85,9 @@ export const FormatBadgeGroup: React.FC<FormatBadgeGroupProps> = ({
           }}
           className="rs-select rs-select-compact"
         >
-          <option value="none">Gắn nhãn thủ công...</option>
-          <option value="long_form">Video dài (Thủ công)</option>
-          <option value="shorts">Shorts (Thủ công)</option>
+          <option value="none">Gắn nhãn...</option>
+          <option value="long_form">Thủ công: Video dài</option>
+          <option value="shorts">Thủ công: Shorts</option>
         </select>
       )}
     </div>

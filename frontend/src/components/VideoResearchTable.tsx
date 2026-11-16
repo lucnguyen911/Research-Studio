@@ -129,6 +129,16 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
     }
   };
 
+  const hasActiveFilter =
+    vs.search.trim() !== '' ||
+    vs.formatFilter !== 'all' ||
+    vs.includeManualInFormat ||
+    vs.manualFilter !== 'all' ||
+    (showChannelFilter && vs.channelFilter !== 'all') ||
+    (showDateWindowFilter && vs.dateWindow !== 'all') ||
+    (showMinViewsFilter && vs.minViews.trim() !== '') ||
+    (showBreakoutToggle && vs.onlyBreakout);
+
   const resetFilters = () =>
     updateViewState({
       search: '',
@@ -142,138 +152,156 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
       page: 1,
     });
 
+  if (videos.length === 0 && !hasActiveFilter) {
+    return <EmptyStateCard title={emptyTitle} description={emptyDescription} />;
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div className="rs-toolbar">
-        <input
-          type="search"
-          aria-label="Tìm nhanh theo tiêu đề video hoặc tên kênh"
-          className="rs-input"
-          style={{ minWidth: 220, flex: '1 1 220px' }}
-          placeholder="Tìm theo tiêu đề hoặc kênh..."
-          value={vs.search}
-          onChange={(e) => updateViewState({ search: e.target.value, page: 1 })}
-        />
-
-        {showChannelFilter && (
-          <select
-            aria-label="Lọc theo kênh"
-            className="rs-select rs-select-compact"
-            value={vs.channelFilter}
-            onChange={(e) => updateViewState({ channelFilter: e.target.value, page: 1 })}
-          >
-            <option value="all">Tất cả kênh ({distinctChannels.length})</option>
-            {distinctChannels.map(([cid, cname]) => (
-              <option key={cid} value={cid}>
-                {cname}
-              </option>
-            ))}
-          </select>
-        )}
-
-        {showDateWindowFilter && (
-          <select
-            aria-label="Cửa sổ ngày đăng"
-            className="rs-select rs-select-compact"
-            value={vs.dateWindow}
-            onChange={(e) => updateViewState({ dateWindow: e.target.value as ViewFilterState['dateWindow'], page: 1 })}
-          >
-            <option value="3">Đăng &lt;= 3 ngày</option>
-            <option value="7">Đăng &lt;= 7 ngày</option>
-            <option value="14">Đăng &lt;= 14 ngày</option>
-            <option value="30">Đăng &lt;= 30 ngày</option>
-            <option value="all">Tất cả trong cache &lt;= 30 ngày</option>
-          </select>
-        )}
-
-        {showMinViewsFilter && (
+      <div className="rs-table-controls">
+        <div className="rs-table-controls-row">
           <input
-            type="number"
-            aria-label="Lượt xem tối thiểu"
+            type="search"
+            aria-label="Tìm theo tiêu đề video hoặc tên kênh"
             className="rs-input"
-            style={{ width: 135 }}
-            placeholder="Views >= ..."
-            value={vs.minViews}
-            onChange={(e) => updateViewState({ minViews: e.target.value, page: 1 })}
+            style={{ minWidth: 220, flex: '1 1 220px' }}
+            placeholder="Tìm theo tiêu đề hoặc kênh..."
+            value={vs.search}
+            onChange={(e) => updateViewState({ search: e.target.value, page: 1 })}
           />
-        )}
 
-        <select
-          aria-label="Sắp xếp theo trường YouTube gốc"
-          className="rs-select rs-select-compact"
-          value={`${vs.sortBy}:${vs.sortDir}`}
-          onChange={(e) => {
-            const [sortBy, sortDir] = e.target.value.split(':') as [ViewFilterState['sortBy'], 'desc' | 'asc'];
-            updateViewState({ sortBy, sortDir, page: 1 });
-          }}
-        >
-          <option value="viewCount:desc">Sắp xếp: viewCount giảm dần</option>
-          <option value="viewCount:asc">Sắp xếp: viewCount tăng dần</option>
-          <option value="likeCount:desc">Sắp xếp: likeCount giảm dần</option>
-          <option value="commentCount:desc">Sắp xếp: commentCount giảm dần</option>
-          <option value="publishedAt:desc">Sắp xếp: Mới đăng nhất</option>
-          <option value="durationSeconds:desc">Sắp xếp: Thời lượng dài nhất</option>
-        </select>
+          {showChannelFilter && (
+            <select
+              aria-label="Lọc theo kênh"
+              className="rs-select rs-select-compact"
+              value={vs.channelFilter}
+              onChange={(e) => updateViewState({ channelFilter: e.target.value, page: 1 })}
+            >
+              <option value="all">Tất cả kênh ({distinctChannels.length})</option>
+              {distinctChannels.map(([cid, cname]) => (
+                <option key={cid} value={cid}>
+                  {cname}
+                </option>
+              ))}
+            </select>
+          )}
 
-        {showBreakoutToggle && (
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '13px' }}>
+          {showDateWindowFilter && (
+            <select
+              aria-label="Thời gian đăng"
+              className="rs-select rs-select-compact"
+              value={vs.dateWindow}
+              onChange={(e) => updateViewState({ dateWindow: e.target.value as ViewFilterState['dateWindow'], page: 1 })}
+            >
+              <option value="3">Đăng ≤ 3 ngày</option>
+              <option value="7">Đăng ≤ 7 ngày</option>
+              <option value="14">Đăng ≤ 14 ngày</option>
+              <option value="30">Đăng ≤ 30 ngày</option>
+              <option value="all">Mọi thời điểm đã lưu</option>
+            </select>
+          )}
+
+          {showMinViewsFilter && (
             <input
-              type="checkbox"
-              checked={vs.onlyBreakout}
-              onChange={(e) => updateViewState({ onlyBreakout: e.target.checked, page: 1 })}
+              type="number"
+              aria-label="Lượt xem tối thiểu"
+              className="rs-input"
+              style={{ width: 140 }}
+              placeholder="Lượt xem từ..."
+              value={vs.minViews}
+              onChange={(e) => updateViewState({ minViews: e.target.value, page: 1 })}
             />
-            <span>Chỉ video đã Đánh dấu Bứt phá</span>
-          </label>
-        )}
-      </div>
+          )}
 
-      <div className="rs-toolbar" style={{ justifyContent: 'space-between' }}>
-        <div className="rs-pill-group" role="group" aria-label="Lọc tách biệt 3 trạng thái định dạng nguồn">
-          <button
-            type="button"
-            className={`rs-pill-tab ${vs.formatFilter === 'all' ? 'is-active' : ''}`}
-            onClick={() => updateViewState({ formatFilter: 'all', page: 1 })}
+          <select
+            aria-label="Sắp xếp danh sách video"
+            className="rs-select rs-select-compact"
+            value={`${vs.sortBy}:${vs.sortDir}`}
+            onChange={(e) => {
+              const [sortBy, sortDir] = e.target.value.split(':') as [ViewFilterState['sortBy'], 'desc' | 'asc'];
+              updateViewState({ sortBy, sortDir, page: 1 });
+            }}
           >
-            Tất cả ({videos.length})
-          </button>
-          <button
-            type="button"
-            className={`rs-pill-tab ${vs.formatFilter === 'long_form' ? 'is-active' : ''}`}
-            onClick={() => updateViewState({ formatFilter: 'long_form', page: 1 })}
-          >
-            Video dài ({getEffectiveFormatCount('long_form')})
-          </button>
-          <button
-            type="button"
-            className={`rs-pill-tab ${vs.formatFilter === 'shorts' ? 'is-active' : ''}`}
-            onClick={() => updateViewState({ formatFilter: 'shorts', page: 1 })}
-          >
-            Shorts ({getEffectiveFormatCount('shorts')})
-          </button>
-          <button
-            type="button"
-            className={`rs-pill-tab ${vs.formatFilter === 'unknown' ? 'is-active' : ''}`}
-            onClick={() => updateViewState({ formatFilter: 'unknown', page: 1 })}
-          >
-            Chưa xác định &lt;=180s ({getEffectiveFormatCount('unknown')})
-          </button>
+            <option value="viewCount:desc">Lượt xem: Cao đến thấp</option>
+            <option value="viewCount:asc">Lượt xem: Thấp đến cao</option>
+            <option value="likeCount:desc">Lượt thích: Nhiều nhất</option>
+            <option value="commentCount:desc">Bình luận: Nhiều nhất</option>
+            <option value="publishedAt:desc">Mới đăng nhất</option>
+            <option value="durationSeconds:desc">Thời lượng dài nhất</option>
+          </select>
+
+          {showBreakoutToggle && (
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '13px' }}>
+              <input
+                type="checkbox"
+                checked={vs.onlyBreakout}
+                onChange={(e) => updateViewState({ onlyBreakout: e.target.checked, page: 1 })}
+              />
+              <span>Chỉ video Bứt phá</span>
+            </label>
+          )}
         </div>
 
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12.5px', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={vs.includeManualInFormat}
-            onChange={(e) => updateViewState({ includeManualInFormat: e.target.checked, page: 1 })}
-          />
-          <span>Bao gồm nhãn thủ công của tôi (không gộp ngầm Chưa xác định)</span>
-        </label>
+        <div className="rs-table-controls-row" style={{ justifyContent: 'space-between' }}>
+          <div className="rs-pill-group" role="group" aria-label="Lọc theo định dạng video">
+            <button
+              type="button"
+              className={`rs-pill-tab ${vs.formatFilter === 'all' ? 'is-active' : ''}`}
+              onClick={() => updateViewState({ formatFilter: 'all', page: 1 })}
+            >
+              Tất cả ({videos.length})
+            </button>
+            <button
+              type="button"
+              className={`rs-pill-tab ${vs.formatFilter === 'long_form' ? 'is-active' : ''}`}
+              onClick={() => updateViewState({ formatFilter: 'long_form', page: 1 })}
+            >
+              Video dài ({getEffectiveFormatCount('long_form')})
+            </button>
+            <button
+              type="button"
+              className={`rs-pill-tab ${vs.formatFilter === 'shorts' ? 'is-active' : ''}`}
+              onClick={() => updateViewState({ formatFilter: 'shorts', page: 1 })}
+            >
+              Shorts ({getEffectiveFormatCount('shorts')})
+            </button>
+            <button
+              type="button"
+              className={`rs-pill-tab ${vs.formatFilter === 'unknown' ? 'is-active' : ''}`}
+              title="Video ngắn ≤ 3 phút chưa xác định rõ định dạng từ nguồn YouTube"
+              onClick={() => updateViewState({ formatFilter: 'unknown', page: 1 })}
+            >
+              Chưa rõ định dạng ({getEffectiveFormatCount('unknown')})
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <label
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12.5px', cursor: 'pointer' }}
+              title="Gộp video bạn đã gắn nhãn thủ công vào bộ lọc Video dài / Shorts"
+            >
+              <input
+                type="checkbox"
+                checked={vs.includeManualInFormat}
+                onChange={(e) => updateViewState({ includeManualInFormat: e.target.checked, page: 1 })}
+              />
+              <span>Tính cả nhãn thủ công</span>
+            </label>
+
+            {hasActiveFilter && (
+              <button type="button" className="rs-btn rs-btn-ghost rs-btn-sm" onClick={resetFilters}>
+                Đặt lại lọc
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {pagedVideos.length === 0 ? (
         <EmptyStateCard
           title={emptyTitle}
           description={emptyDescription}
-          actionLabel="Xóa toàn bộ bộ lọc"
+          actionLabel="Đặt lại bộ lọc"
           onAction={resetFilters}
         />
       ) : (
@@ -281,8 +309,8 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
           <table className="rs-table">
             <thead>
               <tr>
-                <th>Video &amp; Kênh YouTube</th>
-                <th>Định dạng 3 lớp</th>
+                <th>Video</th>
+                <th>Định dạng</th>
                 <th className="rs-num-cell">
                   <button type="button" className="rs-sort-btn" onClick={() => toggleSortColumn('viewCount')}>
                     Lượt xem {vs.sortBy === 'viewCount' ? (vs.sortDir === 'desc' ? '↓' : '↑') : ''}
@@ -290,11 +318,16 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                 </th>
                 <th className="rs-num-cell">
                   <button type="button" className="rs-sort-btn" onClick={() => toggleSortColumn('likeCount')}>
-                    Thích / Bình luận
+                    Lượt thích {vs.sortBy === 'likeCount' ? (vs.sortDir === 'desc' ? '↓' : '↑') : ''}
                   </button>
                 </th>
-                {showSnapshotsColumn && <th>Mốc thô &lt;= 30 ngày</th>}
-                <th>Hành động</th>
+                <th className="rs-num-cell">
+                  <button type="button" className="rs-sort-btn" onClick={() => toggleSortColumn('commentCount')}>
+                    Bình luận {vs.sortBy === 'commentCount' ? (vs.sortDir === 'desc' ? '↓' : '↑') : ''}
+                  </button>
+                </th>
+                {showSnapshotsColumn && <th>Lịch sử lượt xem</th>}
+                <th>Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -305,9 +338,9 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
 
                 return (
                   <tr key={v.id}>
-                    <td style={{ minWidth: 250 }}>
-                      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                        <div className="rs-thumb" aria-hidden="true" style={{ width: 92, height: 52, position: 'relative' }}>
+                    <td style={{ minWidth: 280 }}>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                        <div className="rs-thumb" aria-hidden="true">
                           {v.thumbnailUrl && v.thumbnailUrl.startsWith('https://') ? (
                             <img
                               src={v.thumbnailUrl}
@@ -333,7 +366,7 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                           >
                             {v.title}
                           </button>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
                             <button
                               type="button"
                               className="rs-crumb-btn"
@@ -342,12 +375,14 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                             >
                               {v.channelTitle}
                             </button>
-                            <span>· Đăng {v.publishedAt}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{v.publishedAt}</span>
+                            <span aria-hidden="true">·</span>
                             <a
                               href={`https://www.youtube.com/watch?v=${encodeURIComponent(v.id)}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              style={{ color: 'var(--rs-accent-text)', textDecoration: 'none', fontWeight: 600 }}
+                              className="rs-link-quiet"
                             >
                               YouTube ↗
                             </a>
@@ -356,85 +391,84 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                       </div>
                     </td>
 
-                    <td style={{ minWidth: 185 }}>
+                    <td style={{ minWidth: 165 }}>
                       <FormatBadgeGroup video={v} compact />
                     </td>
 
-                    <td className="rs-num-cell" style={{ fontWeight: 700 }}>
+                    <td className="rs-num-cell" style={{ fontWeight: 600 }}>
                       {formatInt(v.viewCount)}
                     </td>
 
                     <td className="rs-num-cell" style={{ color: 'var(--rs-text-secondary)' }}>
-                      <div>👍 {formatInt(v.likeCount)}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>
-                        💬 {formatInt(v.commentCount)}
-                      </div>
+                      {formatInt(v.likeCount)}
+                    </td>
+
+                    <td className="rs-num-cell" style={{ color: 'var(--rs-text-secondary)' }}>
+                      {formatInt(v.commentCount)}
                     </td>
 
                     {showSnapshotsColumn && (
-                      <td style={{ minWidth: 165 }}>
+                      <td style={{ minWidth: 155 }}>
                         <SparklineCell
                           points={snapshotPoints.map((s) => s.viewCount)}
                           labels={snapshotPoints.map((s) => s.capturedAt)}
-                          badgeLabel={`${snapshotPoints.length} mốc thu thập`}
+                          badgeLabel={`${snapshotPoints.length} mốc gần đây`}
                           directionLabel={formatSnapshotDeltaLabel(snapshotPoints)}
-                          tooltipTitle="Mốc viewCount thô <= 30 ngày"
-                          tooltipDetail="Chỉ trình bày số liệu gốc theo timestamp (III.E.4.f), không tính Views/ngày hay tỷ lệ."
-                          insufficientText="Chưa đủ mốc (1 lần lấy)"
+                          tooltipTitle="Lịch sử lượt xem"
+                          tooltipDetail="Số liệu lượt xem theo các lần thu thập gần đây."
+                          insufficientText="1 lần lấy dữ liệu"
                         />
                       </td>
                     )}
 
-                    <td style={{ minWidth: 155 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
+                    <td style={{ minWidth: 175 }}>
+                      <div className="rs-row-actions">
                         {projectIdForBreakout && (
                           <button
                             type="button"
                             className={`rs-btn rs-btn-sm ${breakoutState?.flagged ? 'rs-btn-primary' : 'rs-btn-secondary'}`}
-                            title={breakoutState?.flagged ? 'Bỏ cờ Đánh dấu Bứt phá thủ công' : 'Đánh dấu Video Bứt phá thủ công'}
+                            title={breakoutState?.flagged ? 'Bỏ đánh dấu Bứt phá' : 'Đánh dấu Video Bứt phá'}
                             onClick={() => {
                               void toggleBreakoutFlag(projectIdForBreakout, v.id);
                             }}
                           >
-                            {breakoutState?.flagged ? '★ Đã đánh dấu' : '☆ Bứt phá'}
+                            {breakoutState?.flagged ? '★ Bứt phá' : '☆ Bứt phá'}
                           </button>
                         )}
-                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                          <button
-                            type="button"
-                            className="rs-btn rs-btn-sm rs-btn-tinted"
-                            onClick={() =>
-                              openSaveIdeaModal({
-                                title: v.title,
-                                sourceType: 'youtube_video',
-                                sourceRefId: v.id,
-                                sourceTitleSnapshot: v.title,
-                                sourceUrl: `https://www.youtube.com/watch?v=${v.id}`,
-                                tags: v.tags,
-                              })
-                            }
-                          >
-                            + Ý tưởng
-                          </button>
+                        <button
+                          type="button"
+                          className="rs-btn rs-btn-sm rs-btn-tinted"
+                          onClick={() =>
+                            openSaveIdeaModal({
+                              title: v.title,
+                              sourceType: 'youtube_video',
+                              sourceRefId: v.id,
+                              sourceTitleSnapshot: v.title,
+                              sourceUrl: `https://www.youtube.com/watch?v=${v.id}`,
+                              tags: v.tags,
+                            })
+                          }
+                        >
+                          + Ý tưởng
+                        </button>
+                        <button
+                          type="button"
+                          className="rs-btn rs-btn-sm rs-btn-secondary"
+                          onClick={() => openInspectorVideo(v.id)}
+                        >
+                          Xem nhanh
+                        </button>
+                        {activeProject && !projectIdForBreakout && v.channelId && (
                           <button
                             type="button"
                             className="rs-btn rs-btn-sm rs-btn-secondary"
-                            onClick={() => openInspectorVideo(v.id)}
+                            onClick={() => {
+                              void addChannelToProject(activeProject.id, v.channelId);
+                            }}
                           >
-                            Xem nhanh
+                            + Đối thủ
                           </button>
-                          {activeProject && !projectIdForBreakout && v.channelId && (
-                            <button
-                              type="button"
-                              className="rs-btn rs-btn-sm rs-btn-secondary"
-                              onClick={() => {
-                                void addChannelToProject(activeProject.id, v.channelId);
-                              }}
-                            >
-                              + Đối thủ
-                            </button>
-                          )}
-                        </div>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -445,8 +479,8 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
 
           <div className="rs-pagination">
             <div className="rs-tabular" style={{ fontSize: '13px', color: 'var(--rs-text-secondary)' }}>
-              Hiển thị {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, sorted.length)} trên{' '}
-              <strong>{sorted.length}</strong> video ({pageSize} dòng/trang)
+              {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, sorted.length)} /{' '}
+              <strong>{sorted.length}</strong> video
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <button
@@ -455,7 +489,7 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                 disabled={safePage <= 1}
                 onClick={() => updateViewState({ page: safePage - 1 })}
               >
-                Trang trước
+                Trước
               </button>
               <span className="rs-tabular" style={{ fontSize: '13px', fontWeight: 600 }}>
                 Trang {safePage} / {totalPages}
@@ -466,7 +500,7 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                 disabled={safePage >= totalPages}
                 onClick={() => updateViewState({ page: safePage + 1 })}
               >
-                Trang kế
+                Sau
               </button>
             </div>
           </div>

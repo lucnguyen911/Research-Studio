@@ -418,24 +418,24 @@ export const VideoInspectorDrawer: React.FC = () => {
   const video = cachedVideosById[inspectorVideoId];
   if (!video) {
     return (
-      <aside className="rs-drawer" aria-label="Panel xem nhanh video">
+      <aside className="rs-drawer" aria-label="Xem nhanh video">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <strong>Xem nhanh Video (Inspector)</strong>
+          <strong>Xem nhanh video</strong>
           <button type="button" className="rs-btn rs-btn-ghost rs-btn-sm" onClick={() => openInspectorVideo(null)}>
             Đóng ×
           </button>
         </div>
         <div className="rs-card" style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)' }}>
-          Không còn dữ liệu video trong phiên hiện tại. Bạn có thể mở trang Chi tiết đầy đủ từ danh sách nguồn.
+          Không còn dữ liệu video trong phiên hiện tại. Bạn có thể mở trang chi tiết từ danh sách nguồn.
         </div>
       </aside>
     );
   }
 
   return (
-    <aside className="rs-drawer" aria-label="Panel xem nhanh video">
+    <aside className="rs-drawer" aria-label="Xem nhanh video">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <strong>Xem nhanh Video (Inspector)</strong>
+        <strong>Xem nhanh video</strong>
         <button type="button" className="rs-btn rs-btn-ghost rs-btn-sm" onClick={() => openInspectorVideo(null)}>
           Đóng ×
         </button>
@@ -445,22 +445,22 @@ export const VideoInspectorDrawer: React.FC = () => {
         <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
           {video.channelTitle} · Đăng {video.publishedAt} · {video.durationDisplay}
         </div>
-        <div className="rs-tabular" style={{ display: 'flex', gap: 12, fontSize: '13px' }}>
-          <span>👁 {formatInt(video.viewCount)}</span>
-          <span>👍 {formatInt(video.likeCount)}</span>
-          <span>💬 {formatInt(video.commentCount)}</span>
+        <div className="rs-tabular" style={{ display: 'flex', gap: 12, fontSize: '13px', color: 'var(--rs-text-secondary)' }}>
+          <span>{formatInt(video.viewCount)} lượt xem</span>
+          <span>{formatInt(video.likeCount)} thích</span>
+          <span>{formatInt(video.commentCount)} bình luận</span>
         </div>
         <FormatBadgeGroup video={video} compact />
         <SparklineCell
           points={video.snapshots30d.map((s) => s.viewCount)}
           labels={video.snapshots30d.map((s) => s.capturedAt)}
-          badgeLabel="Mốc viewCount thô <= 30 ngày"
+          badgeLabel="Lịch sử lượt xem"
           directionLabel={formatSnapshotDeltaLabel(video.snapshots30d)}
-          tooltipTitle="Chuỗi mốc thô SQLite"
-          tooltipDetail="Hiển thị nguyên bản số liệu các lần thu thập <= 30 ngày, không tính tỷ lệ."
+          tooltipTitle="Lịch sử lượt xem"
+          tooltipDetail="Số liệu lượt xem theo các lần thu thập gần đây."
         />
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <button
           type="button"
           className="rs-btn rs-btn-primary rs-btn-sm"
@@ -475,15 +475,24 @@ export const VideoInspectorDrawer: React.FC = () => {
             })
           }
         >
-          + Lưu Ý tưởng
+          + Ý tưởng
         </button>
         <button
           type="button"
           className="rs-btn rs-btn-secondary rs-btn-sm"
           onClick={() => navigate('video-detail', { params: { videoId: video.id, fromChannelId: video.channelId } })}
         >
-          Mở Chi tiết đầy đủ →
+          Chi tiết →
         </button>
+        <a
+          href={`https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rs-link-quiet"
+          style={{ marginLeft: 'auto' }}
+        >
+          YouTube ↗
+        </a>
       </div>
     </aside>
   );

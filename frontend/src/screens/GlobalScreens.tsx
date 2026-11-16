@@ -440,6 +440,15 @@ export const GlobalOverviewScreen: React.FC = () => {
   );
 };
 
+const TREND_REGIONS: Array<{ code: string; label: string }> = [
+  { code: 'VN', label: 'VN — Việt Nam' },
+  { code: 'US', label: 'US — Hoa Kỳ' },
+  { code: 'JP', label: 'JP — Nhật Bản' },
+  { code: 'KR', label: 'KR — Hàn Quốc' },
+  { code: 'GB', label: 'GB — Vương quốc Anh' },
+  { code: 'DE', label: 'DE — Đức' },
+];
+
 export const TrendDiscoveryScreen: React.FC = () => {
   const { currentEntry, updateViewState, navigate } = useAppNavigation();
   const {
@@ -448,6 +457,8 @@ export const TrendDiscoveryScreen: React.FC = () => {
     quotaStatus,
     registerVideosInMemory,
     syncQuotaStatus,
+    refreshWorkspaceStatus,
+    setLegalModalOpen,
     pushToast,
   } = usePrototypeWorkspace();
 
@@ -459,6 +470,7 @@ export const TrendDiscoveryScreen: React.FC = () => {
   const [categories, setCategories] = useState<YoutubeCategoryDto[]>([
     { id: 'all', title: 'Tất cả danh mục' },
   ]);
+  const [trendsReloadNonce, setTrendsReloadNonce] = useState(0);
   const [trendsState, setTrendsState] = useState<{
     key: string;
     data: TrendsResponseDto | null;
@@ -470,7 +482,11 @@ export const TrendDiscoveryScreen: React.FC = () => {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchGlobalCategoriesApi({ regionCode: region, language: systemSettings.defaultRelevanceLanguage, signal: controller.signal })
+    fetchGlobalCategoriesApi({
+      regionCode: region,
+      language: systemSettings.defaultRelevanceLanguage,
+      signal: controller.signal,
+    })
       .then((res) => {
         if (!controller.signal.aborted) {
           setCategories(res.items);
@@ -493,25 +509,39 @@ export const TrendDiscoveryScreen: React.FC = () => {
       })
       .catch((err) => {
         if (isAbortError(err) || controller.signal.aborted) return;
-        const msg = err instanceof ApiClientError ? err.message : 'Không tải được cache Xu hướng từ SQLite.';
+        const msg = err instanceof ApiClientError ? err.message : 'Không tải được dữ liệu xu hướng đã lưu.';
         setTrendsState({ key: cacheKey, data: null, videos: [], error: msg });
       });
     return () => {
       controller.abort();
       refreshAbortRef.current?.abort();
     };
-  }, [region, category, cacheKey, registerVideosInMemory]);
+  }, [region, category, cacheKey, trendsReloadNonce, registerVideosInMemory]);
 
   const isLoading = trendsState.key !== cacheKey && trendsState.error === null;
+  const trendsError = trendsState.key === cacheKey ? trendsState.error : null;
   const trendVideos = trendsState.key === cacheKey ? trendsState.videos : [];
-  const fetchedAtDisplay = trendsState.key === cacheKey ? formatDateTimeVi(trendsState.data?.fetchedAt) : '—';
+  const fetchedAt = trendsState.key === cacheKey ? trendsState.data?.fetchedAt : null;
+  const fetchedAtDisplay = fetchedAt ? formatDateTimeVi(fetchedAt) : 'Chưa tải dữ liệu';
 
+  const needsSetup = !systemSettings.legalConsentAccepted || systemSettings.apiKeyStatus !== 'configured';
   const blocked =
     !backendOnline ||
-    !systemSettings.legalConsentAccepted ||
-    systemSettings.apiKeyStatus !== 'configured' ||
+    needsSetup ||
     quotaStatus.generalData.exhausted ||
     refreshing;
+
+  const blockedReason = !backendOnline
+    ? 'Chưa kết nối được dịch vụ dữ liệu cục bộ.'
+    : !systemSettings.legalConsentAccepted
+      ? 'Cần xác nhận điều khoản YouTube trước khi tải dữ liệu mới.'
+      : systemSettings.apiKeyStatus === 'unreadable'
+        ? 'YouTube API Key hiện tại không đọc được.'
+        : systemSettings.apiKeyStatus !== 'configured'
+          ? 'Cần cài đặt YouTube API Key trong Cài đặt.'
+          : quotaStatus.generalData.exhausted
+            ? 'Đã hết hạn mức dữ liệu YouTube hôm nay.'
+            : undefined;
 
   const handleRefreshTrends = () => {
     refreshAbortRef.current?.abort();
@@ -525,15 +555,15 @@ export const TrendDiscoveryScreen: React.FC = () => {
         registerVideosInMemory(mapped);
         setTrendsState({ key: cacheKey, data: res, videos: mapped, error: null });
         void syncQuotaStatus();
-        pushToast('success', `Đã nạp ${mapped.length} video xu hướng ${region} (-1 unit General Data API).`);
+        pushToast('success', `Đã cập nhật ${mapped.length} video xu hướng (${region}).`);
       })
       .catch((err) => {
         if (isAbortError(err)) {
-          pushToast('success', 'Đã hủy tác vụ làm mới Khám phá xu hướng.');
+          pushToast('success', 'Đã hủy tải xu hướng.');
           return;
         }
         void syncQuotaStatus();
-        pushToast('error', err instanceof ApiClientError ? err.message : 'Không thể làm mới Khám phá xu hướng.');
+        pushToast('error', err instanceof ApiClientError ? err.message : 'Không thể tải dữ liệu xu hướng từ YouTube.');
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -542,20 +572,85 @@ export const TrendDiscoveryScreen: React.FC = () => {
       });
   };
 
+  const handleRetryConnection = () => {
+    void (async () => {
+      const ok = await refreshWorkspaceStatus();
+      if (ok) {
+        setTrendsReloadNonce((n) => n + 1);
+      }
+    })();
+  };
+
+  const regionOptions = TREND_REGIONS.some((r) => r.code === region)
+    ? TREND_REGIONS
+    : [{ code: region, label: region }, ...TREND_REGIONS];
+
+  const contextualBanner = !backendOnline
+    ? {
+        danger: true,
+        message: 'Không kết nối được dịch vụ dữ liệu cục bộ.',
+        actionLabel: 'Thử lại',
+        onAction: handleRetryConnection,
+      }
+    : trendsError
+      ? {
+          danger: true,
+          message: trendsError,
+          actionLabel: 'Thử lại',
+          onAction: () => setTrendsReloadNonce((n) => n + 1),
+        }
+      : systemSettings.apiKeyStatus === 'unreadable'
+        ? {
+            danger: true,
+            message: 'Không đọc được YouTube API Key đã lưu.',
+            actionLabel: 'Cập nhật API Key',
+            onAction: () => navigate('system-settings'),
+          }
+        : quotaStatus.generalData.exhausted
+          ? {
+              danger: true,
+              message: 'Đã hết hạn mức dữ liệu YouTube hôm nay (làm mới lúc 00:00 PT). Bạn vẫn xem được các video đã lưu.',
+            }
+          : quotaStatus.generalData.warning
+            ? {
+                danger: false,
+                message: `Sắp chạm hạn mức dữ liệu YouTube trong ngày (${quotaStatus.generalData.used.toLocaleString('vi-VN')}/${quotaStatus.generalData.limit.toLocaleString('vi-VN')}).`,
+              }
+            : trendVideos.length > 0 && needsSetup
+              ? {
+                  danger: false,
+                  message: !systemSettings.legalConsentAccepted
+                    ? 'Cần xác nhận điều khoản YouTube để cập nhật danh sách mới.'
+                    : 'Cần cấu hình YouTube API Key để cập nhật danh sách mới.',
+                  actionLabel: !systemSettings.legalConsentAccepted ? 'Xác nhận điều khoản' : 'Mở Cài đặt',
+                  onAction: !systemSettings.legalConsentAccepted
+                    ? () => setLegalModalOpen(true)
+                    : () => navigate('system-settings'),
+                }
+              : null;
+
   return (
     <div className="rs-container">
-      <div className="rs-page-header">
+      <div className="rs-page-header" style={{ alignItems: 'center' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <h1 className="rs-page-title">Khám phá xu hướng (G2)</h1>
-            <span className="rs-badge">Nguồn: YouTube Data API (mostPopular)</span>
+          <h1 className="rs-page-title">Khám phá xu hướng</h1>
+          <div className="rs-trends-meta">
+            <span>Nguồn: YouTube</span>
+            <span aria-hidden="true">·</span>
+            <span>{fetchedAt ? `Cập nhật ${fetchedAtDisplay}` : fetchedAtDisplay}</span>
+            <span aria-hidden="true">·</span>
+            <a
+              href="https://www.youtube.com/feed/trending"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rs-link-quiet"
+            >
+              YouTube Thịnh hành ↗
+            </a>
           </div>
-          <p className="rs-page-subtitle">
-            Cập nhật gần nhất: {fetchedAtDisplay} · Lưu đệm tối đa 30 ngày lịch · 0 lượt Search Queries
-          </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="rs-overview-actions">
           {refreshing ? (
             <button
               type="button"
@@ -565,39 +660,61 @@ export const TrendDiscoveryScreen: React.FC = () => {
                 setRefreshing(false);
               }}
             >
-              Hủy (Cancel)
+              Hủy
             </button>
           ) : (
             <button
               type="button"
               className="rs-btn rs-btn-primary"
               disabled={blocked}
+              title={blockedReason}
               onClick={handleRefreshTrends}
             >
-              Làm mới xu hướng (1 unit API)
+              {trendVideos.length > 0 ? 'Làm mới xu hướng' : 'Tải xu hướng'}
             </button>
           )}
         </div>
       </div>
 
-      <GlobalModeBanners requiresYouTubeApi />
+      {contextualBanner && (
+        <div
+          className={`rs-banner ${contextualBanner.danger ? 'rs-banner-danger' : 'rs-banner-warn'}`}
+          role="alert"
+        >
+          <div style={{ fontSize: '13.5px' }}>{contextualBanner.message}</div>
+          {contextualBanner.actionLabel && contextualBanner.onAction && (
+            <button
+              type="button"
+              className="rs-btn rs-btn-sm rs-btn-secondary"
+              onClick={contextualBanner.onAction}
+            >
+              {contextualBanner.actionLabel}
+            </button>
+          )}
+        </div>
+      )}
 
-      <div className="rs-toolbar">
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontWeight: 600 }}>Quốc gia:</span>
+      <div className="rs-trends-bar">
+        <label className="rs-trends-field">
+          <span className="rs-trends-field-label">Quốc gia</span>
           <select
+            aria-label="Quốc gia"
             className="rs-select rs-select-compact"
             value={region}
             onChange={(e) => updateViewState({ regionCodeFilter: e.target.value, page: 1 })}
           >
-            <option value="VN">VN — Việt Nam</option>
-            <option value="US">US — Hoa Kỳ</option>
-            <option value="JP">JP — Nhật Bản</option>
+            {regionOptions.map((opt) => (
+              <option key={opt.code} value={opt.code}>
+                {opt.label}
+              </option>
+            ))}
           </select>
         </label>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontWeight: 600 }}>Danh mục:</span>
+
+        <label className="rs-trends-field">
+          <span className="rs-trends-field-label">Danh mục</span>
           <select
+            aria-label="Danh mục"
             className="rs-select rs-select-compact"
             value={category}
             onChange={(e) => updateViewState({ categoryFilter: e.target.value, page: 1 })}
@@ -609,37 +726,48 @@ export const TrendDiscoveryScreen: React.FC = () => {
             ))}
           </select>
         </label>
-        <a
-          href="https://www.youtube.com/feed/trending"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ marginLeft: 'auto', fontSize: '12.5px', fontWeight: 600, color: 'var(--rs-accent-text)' }}
-        >
-          Dữ liệu thuộc YouTube ↗
-        </a>
+
+        {trendVideos.length > 0 && (
+          <span className="rs-trends-count rs-tabular">{trendVideos.length} video</span>
+        )}
       </div>
 
       {isLoading ? (
-        <LoadingSkeletonCard label="Đang đọc dữ liệu Xu hướng lưu đệm <= 30 ngày..." />
+        <LoadingSkeletonCard label="Đang tải danh sách xu hướng..." />
+      ) : trendVideos.length === 0 ? (
+        needsSetup ? (
+          <EmptyStateCard
+            title="Chưa thiết lập kết nối YouTube API"
+            description={
+              !systemSettings.legalConsentAccepted
+                ? 'Xác nhận điều khoản YouTube và lưu API Key cá nhân trong Cài đặt để tải danh sách video thịnh hành.'
+                : 'Thêm YouTube API Key cá nhân trong Cài đặt để tải danh sách video thịnh hành.'
+            }
+            actionLabel={!systemSettings.legalConsentAccepted ? 'Xác nhận điều khoản' : 'Thiết lập API Key'}
+            onAction={
+              !systemSettings.legalConsentAccepted
+                ? () => setLegalModalOpen(true)
+                : () => navigate('system-settings')
+            }
+            secondaryLabel={!systemSettings.legalConsentAccepted ? 'Mở Cài đặt' : undefined}
+            onSecondary={!systemSettings.legalConsentAccepted ? () => navigate('system-settings') : undefined}
+          />
+        ) : (
+          <EmptyStateCard
+            title="Chưa có dữ liệu xu hướng cho lựa chọn này"
+            description={`Bấm "Tải xu hướng" để lấy danh sách video thịnh hành mới nhất tại ${region}.`}
+            actionLabel={blocked ? undefined : 'Tải xu hướng'}
+            onAction={blocked ? undefined : handleRefreshTrends}
+          />
+        )
       ) : (
         <VideoResearchTable
           videos={trendVideos}
           fromScreen="global-trends"
-          emptyTitle="Chưa có dữ liệu Xu hướng còn hạn cho bộ lọc này"
-          emptyDescription={
-            systemSettings.apiKeyStatus !== 'configured' || !systemSettings.legalConsentAccepted
-              ? 'Vui lòng xác nhận Pháp lý và lưu YouTube API Key trong Cài đặt hệ thống để tải Xu hướng.'
-              : 'Bấm "Làm mới xu hướng (1 unit API)" ở góc phải để lấy danh sách video nổi bật từ YouTube.'
-          }
+          pageSize={15}
+          emptyTitle="Không có video nào khớp bộ lọc"
+          emptyDescription="Thử đổi từ khóa tìm kiếm hoặc đặt lại bộ lọc."
         />
-      )}
-
-      {!isLoading && trendVideos.length === 0 && systemSettings.apiKeyStatus !== 'configured' && (
-        <div>
-          <button type="button" className="rs-btn rs-btn-secondary" onClick={() => navigate('system-settings')}>
-            Đi tới Cài đặt API Key &amp; Pháp lý →
-          </button>
-        </div>
       )}
     </div>
   );

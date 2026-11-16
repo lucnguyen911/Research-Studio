@@ -1284,3 +1284,69 @@ textarea {
   color: var(--rs-text-muted);
   line-height: 1.35;
 }
+
+/* Wave 2 G2 Trends & Video Comparison Table */
+.rs-trends-meta {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--rs-text-muted);
+}
+
+.rs-trends-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--rs-bg-card);
+  border: 1px solid var(--rs-border);
+  border-radius: var(--rs-radius-lg);
+  box-shadow: var(--rs-card-shadow);
+}
+
+.rs-trends-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+}
+
+.rs-trends-field-label {
+  font-weight: 600;
+  color: var(--rs-text-secondary);
+}
+
+.rs-trends-count {
+  margin-left: auto;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--rs-text-muted);
+}
+
+.rs-table-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--rs-bg-card);
+  border: 1px solid var(--rs-border);
+  border-radius: var(--rs-radius-lg);
+}
+
+.rs-table-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rs-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
