@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="vi" class="light" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Research Studio — UI Prototype (DEMO)</title>
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('rs_theme');
+          var theme = saved === 'dark' ? 'dark' : 'light';
+          var root = document.documentElement;
+          root.classList.remove('light', 'dark');
+          root.classList.add(theme);
+          root.setAttribute('data-theme', theme);
+          root.style.colorScheme = theme;
+        } catch (_err) {
+          // Safe fallback to Light Mode
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

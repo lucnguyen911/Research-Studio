@@ -1,0 +1,120 @@
+:root {
+  --rs-font-sans: "Inter Variable", "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --rs-font-mono: "JetBrains Mono Variable", "Cascadia Mono", "Consolas", ui-monospace, SFMono-Regular, monospace;
+
+  --rs-radius-sm: 6px;
+  --rs-radius-md: 8px;
+  --rs-radius-lg: 12px;
+  --rs-radius-pill: 9999px;
+
+  --rs-sidebar-width: 268px;
+  --rs-sidebar-collapsed: 64px;
+  --rs-topbar-height: 52px;
+}
+
+/* Light Mode — Default (VOXLAB Tactile Luxury Studio: Travertine Cream, Ivory & Amber) */
+:root,
+html.light,
+[data-theme="light"] {
+  color-scheme: light;
+  --rs-bg-app: #EFE9DF;
+  --rs-bg-panel: #F7F3EC;
+  --rs-bg-card: #FFFFFF;
+  --rs-bg-subtle: #EFE8DD;
+  --rs-bg-hover: #F5EFE5;
+  --rs-bg-input: #EDE6DA;
+  --rs-border: #D4C5B0;
+  --rs-border-strong: #B69F83;
+
+  --rs-accent: #D97706;
+  --rs-accent-hover: #B45309;
+  --rs-accent-text: #92400E;
+  --rs-accent-soft: #FEF3C7;
+  --rs-accent-soft-border: #F59E0B;
+
+  --rs-text-primary: #18110B;
+  --rs-text-secondary: #433528;
+  --rs-text-muted: #635242;
+
+  --rs-cta-grad: linear-gradient(180deg, #FCD34D 0%, #F59E0B 56%, #E28807 100%);
+  --rs-cta-grad-hover: linear-gradient(180deg, #FDE68A 0%, #FBBF24 48%, #D97706 100%);
+  --rs-cta-text: #18110B;
+  --rs-cta-border: rgba(180, 83, 9, 0.72);
+
+  --rs-btn-secondary-bg: linear-gradient(180deg, #FFFFFF 0%, #FCF9F4 58%, #F1E9DD 100%);
+  --rs-btn-secondary-border: #C9B79E;
+
+  --rs-success-text: #047857;
+  --rs-success-bg: #D1FAE5;
+  --rs-success-border: #6EE7B7;
+
+  --rs-warning-text: #9A3412;
+  --rs-warning-bg: #FFEDD5;
+  --rs-warning-border: #FDBA74;
+
+  --rs-danger-text: #BE123C;
+  --rs-danger-bg: #FFE4E6;
+  --rs-danger-border: #FDA4AF;
+
+  --rs-info-text: #574534;
+  --rs-info-bg: #EFE7DA;
+  --rs-info-border: #CBB99F;
+
+  --rs-card-shadow: inset 0 1px 0 0 #FFFFFF, 0 1px 2px rgba(36, 24, 12, 0.05), 0 6px 16px -4px rgba(58, 40, 22, 0.07);
+  --rs-input-shadow: inset 0 1.5px 3px rgba(28, 19, 10, 0.07), 0 1px 0 rgba(255, 255, 255, 0.85);
+  --rs-active-shadow: inset 0 1px 0 #FFFFFF, 0 2px 6px -1px rgba(36, 24, 12, 0.08);
+  --rs-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235C4938' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* Dark Mode — Obsidian & Warm Bronze Studio */
+html.dark,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --rs-bg-app: #0C0A08;
+  --rs-bg-panel: #130F0C;
+  --rs-bg-card: #1C1611;
+  --rs-bg-subtle: #261E17;
+  --rs-bg-hover: #2C231B;
+  --rs-bg-input: #14100C;
+  --rs-border: #413226;
+  --rs-border-strong: #6A523E;
+
+  --rs-accent: #F59E0B;
+  --rs-accent-hover: #FBBF24;
+  --rs-accent-text: #FBBF24;
+  --rs-accent-soft: rgba(245, 158, 11, 0.16);
+  --rs-accent-soft-border: rgba(245, 158, 11, 0.44);
+
+  --rs-text-primary: #FDF9F3;
+  --rs-text-secondary: #DBCFC0;
+  --rs-text-muted: #AE9C88;
+
+  --rs-cta-grad: linear-gradient(180deg, #FDE68A 0%, #F59E0B 52%, #EA580C 100%);
+  --rs-cta-grad-hover: linear-gradient(180deg, #FEF08A 0%, #FBBF24 46%, #F59E0B 100%);
+  --rs-cta-text: #18110B;
+  --rs-cta-border: rgba(251, 191, 36, 0.52);
+
+  --rs-btn-secondary-bg: linear-gradient(180deg, #31271F 0%, #251D17 58%, #1D1712 100%);
+  --rs-btn-secondary-border: #4F3E30;
+
+  --rs-success-text: #6EE7B7;
+  --rs-success-bg: rgba(16, 185, 129, 0.16);
+  --rs-success-border: rgba(52, 211, 153, 0.4);
+
+  --rs-warning-text: #FDBA74;
+  --rs-warning-bg: rgba(249, 115, 22, 0.17);
+  --rs-warning-border: rgba(251, 146, 60, 0.42);
+
+  --rs-danger-text: #FDA4AF;
+  --rs-danger-bg: rgba(244, 63, 94, 0.18);
+  --rs-danger-border: rgba(251, 113, 133, 0.44);
+
+  --rs-info-text: #DBCFC0;
+  --rs-info-bg: #261E17;
+  --rs-info-border: #4F3E30;
+
+  --rs-card-shadow: inset 0 1px 0 0 rgba(255, 240, 212, 0.075), 0 2px 6px rgba(0, 0, 0, 0.42), 0 10px 24px -6px rgba(0, 0, 0, 0.56);
+  --rs-input-shadow: inset 0 1.5px 3.5px rgba(0, 0, 0, 0.55), 0 1px 0 rgba(255, 244, 224, 0.04);
+  --rs-active-shadow: inset 0 1px 0 rgba(255, 244, 224, 0.09), 0 4px 10px -2px rgba(0, 0, 0, 0.48);
+  --rs-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23D8CBB9' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
