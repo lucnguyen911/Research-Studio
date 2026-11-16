@@ -18,6 +18,7 @@ from app.routers import project_keywords as project_keywords_router
 from app.routers import projects as projects_router
 from app.routers import rss as rss_router
 from app.routers import system as system_router
+from app.services import scheduler_service
 
 
 @asynccontextmanager
@@ -25,9 +26,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     ensure_runtime_dirs()
     configure_logging()
     run_migrations()
+    await scheduler_service.scheduler.start()
     try:
         yield
     finally:
+        await scheduler_service.scheduler.stop()
         close_logging_handlers()
 
 

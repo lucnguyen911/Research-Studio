@@ -441,4 +441,82 @@ export interface ScanKeywordsResponseDto {
   quota: QuotaStatusDto;
 }
 
+export interface SchedulerStatusDto {
+  running: boolean;
+  startupDelaySec: number;
+  purgeTicks: number;
+  lastPurgeAtUtc: string | null;
+  lastPurgeCounts: Record<string, number> | null;
+  autoRefreshTicks: number;
+  lastAutoRefreshAtUtc: string | null;
+  lastAutoRefreshSummary: Record<string, unknown> | null;
+}
+
+export interface GlobalOverviewDto {
+  validVideosCount: number;
+  expiringSoonVideosCount: number;
+  validChannelsCount: number;
+  validSearchSessionsCount: number;
+  ideasTotalCount: number;
+  ideasUnlinkedCount: number;
+  projectsCount: number;
+  rssSummary: {
+    total: number;
+    enabled: number;
+    errorCount: number;
+    articlesCount: number;
+  };
+  latestRssArticles: RssArticleDto[];
+  quota: QuotaStatusDto;
+  settings: SystemSettingsDto;
+  scheduler: SchedulerStatusDto;
+}
+
+export interface ProjectOverviewDto {
+  projectId: string;
+  competitorChannels: {
+    total: number;
+    active: number;
+    paused: number;
+    error: number;
+  };
+  competitorVideos: {
+    totalValid: number;
+    longForm: number;
+    shorts: number;
+    unknown: number;
+  };
+  breakoutFlaggedCount: number;
+  keywords: {
+    total: number;
+    scannedValid: number;
+  };
+  rss: {
+    linkedFeeds: number;
+    brokenFeeds: number;
+    recentArticlesCount: number;
+  };
+  ideas: {
+    total: number;
+    byStatus: Record<'new' | 'researching' | 'approved' | 'produced' | 'skipped', number>;
+    recent: Array<{
+      id: string;
+      title: string;
+      status: 'new' | 'researching' | 'approved' | 'produced' | 'skipped';
+      priority: 'high' | 'medium' | 'low';
+      projectAngle: string;
+      statusUpdatedAt: string;
+    }>;
+  };
+  latestRssArticles: RssArticleDto[];
+}
+
+export interface ProjectRefreshResponseDto {
+  overview: ProjectOverviewDto;
+  rssRefreshedCount: number;
+  competitorSummary: CompetitorRefreshResponseDto | null;
+  competitorsSkippedReason: string | null;
+  quota: QuotaStatusDto;
+}
+
 

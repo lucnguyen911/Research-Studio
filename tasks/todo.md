@@ -396,7 +396,7 @@
 
 ## Milestone 6 — Integration, Controlled Auto-Refresh & Stability
 
-### [ ] T18 — Tác vụ Dọn TTL 30 Ngày Vô điều kiện & Bộ Lập lịch Tự động Làm mới Có Kiểm soát (`Lifespan Scheduler`)
+### [x] T18 — Tác vụ Dọn TTL 30 Ngày Vô điều kiện & Bộ Lập lịch Tự động Làm mới Có Kiểm soát (`Lifespan Scheduler`)
 - **ID:** T18
 - **TITLE:** Tác vụ Dọn TTL 30 Ngày Vô điều kiện & Bộ Lập lịch Tự động Làm mới Có Kiểm soát (`Lifespan Scheduler`)
 - **GOAL:** Xây dựng `scheduler_service.py` chạy gọn trong `FastAPI lifespan` với hai luồng trách nhiệm tách biệt: (1) Tác vụ dọn TTL `30 ngày lịch` tại local **luôn chạy khi khởi động và theo nhịp timer nội bộ bất kể `auto_refresh_enabled` Bật hay Tắt** (`0` network calls); (2) Tác vụ làm mới mạng tự động chỉ chạy khi app mở và `auto_refresh_enabled = True`, chờ trễ `30s` sau khởi động, giới hạn unit/đợt & trần quota tự động ngày, `0` lượt `search.list`, ưu tiên Video gắn Ý tưởng sắp chạm hạn 30 ngày → Kênh đối thủ → RSS, khóa `in-flight` chống trùng lặp, và tất cả truy vấn SQL chạy qua `anyio.to_thread.run_sync`.
@@ -414,7 +414,7 @@
 - **RISK:** HIGH
 - **USER APPROVAL REQUIRED:** NO
 
-### [ ] T19 — Hoàn thiện Số liệu Tổng hợp Thực tế cho `G1. Tổng quan` & `P1. Tổng quan dự án`
+### [x] T19 — Hoàn thiện Số liệu Tổng hợp Thực tế cho `G1. Tổng quan` & `P1. Tổng quan dự án`
 - **ID:** T19
 - **TITLE:** Hoàn thiện Số liệu Tổng hợp Thực tế cho `G1. Tổng quan` & `P1. Tổng quan dự án`
 - **GOAL:** Nâng cấp endpoint `summary` (Router đọc thẳng query tổng hợp từ Repository, không thêm `overview_service.py`) và giao diện đầy đủ cho `G1. Tổng quan` (2 bucket Quota `PT`, trạng thái làm mới & bản ghi sắp chạm hạn `30 ngày`, tóm tắt Kho ý tưởng, bài RSS mới nhất) và `P1. Tổng quan dự án` (đếm video đối thủ tách bạch 3 trạng thái định dạng + số từ khóa + tin RSS liên kết + phễu 5 trạng thái Ý tưởng + nút làm mới Project có Cancel/Retry), đồng bộ thanh trạng thái Quota & Auto-refresh trên Header.
@@ -434,7 +434,7 @@
 - **RISK:** LOW
 - **USER APPROVAL REQUIRED:** NO
 
-### [ ] T20 — Kiểm thử Tích hợp Đầu–Cuối, Chế độ Offline, Quota, Bảo mật (SSRF/CSRF/DPAPI/XSS) & Nghiệm thu `AC-01`..`AC-18`
+### [x] T20 — Kiểm thử Tích hợp Đầu–Cuối, Chế độ Offline, Quota, Bảo mật (SSRF/CSRF/DPAPI/XSS) & Nghiệm thu `AC-01`..`AC-18`
 - **ID:** T20
 - **TITLE:** Kiểm thử Tích hợp Đầu–Cuối, Chế độ Offline, Quota, Bảo mật (SSRF/CSRF/DPAPI/XSS) & Nghiệm thu `AC-01`..`AC-18`
 - **GOAL:** Triển khai bộ kiểm thử tích hợp E2E tổng hợp (`Offline`, hết `Search Queries` vs hết `General Data API`, `Cancel`/`Retry`, SSRF redirect nội bộ, Localhost CSRF thiếu header/Origin lạ, DPAPI `unreadable`, XXE/XSS RSS, mô phỏng hết hạn 30 ngày, xóa cache YouTube API ngay lập tức, cô lập `project_id`), đo thông số cơ sở cho các tham số `TUNING REQUIRED` và kiểm tra trực tiếp trên trình duyệt bằng Chrome DevTools MCP để đối chiếu toàn bộ `AC-01`..`AC-18` trước khi sang Phase 8–13.
@@ -456,5 +456,5 @@
 - **USER APPROVAL REQUIRED:** NO
 
 ### Checkpoint M6 — Integration & Stability (MVP V1 Complete Candidate)
-- [ ] Tất cả `20` tasks hoàn tất; toàn bộ `AC-01`..`AC-18` trong `SPEC.md` có bằng chứng kiểm thử chạy thật.
-- [ ] Chuyển sang **Phase 8–13** (`Test`, `Code Review`, `Security Review`, `Performance/Tuning`, `Code Simplify`, `Final Review`) trước **Phase 14 (`GATE F`)**.
+- [x] Tất cả `20` tasks hoàn tất; toàn bộ `AC-01`..`AC-18` trong `SPEC.md` có bằng chứng kiểm thử chạy thật.
+- [x] Chuyển sang **Phase 8–13** (`Test`, `Code Review`, `Security Review`, `Performance/Tuning`, `Code Simplify`, `Final Review`) trước **Phase 14 (`GATE F`)**.

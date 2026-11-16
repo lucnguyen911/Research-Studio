@@ -13,6 +13,7 @@ from app.core.config import RSS_MAX_CONCURRENCY
 from app.core.errors import AppError
 from app.db.connection import run_db_sync
 from app.repositories import rss_repo
+from app.services.scheduler_service import in_flight_registry
 
 _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 _TOKEN_RE = re.compile(r"[a-zA-Z0-9À-ỹ]{2,}", re.UNICODE)
@@ -71,6 +72,13 @@ async def refresh_single_feed(
 ) -> dict[str, Any]:
     """Refresh one feed while isolating network/XML/SSRF failures strictly to that feed row."""
     feed = await run_db_sync(rss_repo.get_feed, feed_id)
+    lock_key = f"feed:{feed_id}"
+    if not await in_flight_registry.try_acquire(lock_key):
+        return {
+            "feedId": feed_id,
+            "status": "skipped_in_flight",
+            "feed": feed,
+        }
     try:
         articles = await fetch_and_parse_feed(feed["url"], transport=transport, resolver=resolver)
         outcome = await run_db_sync(rss_repo.record_feed_fetch_success, feed_id, articles)
@@ -91,6 +99,8 @@ async def refresh_single_feed(
             error_message="Lỗi không xác định khi tải nguồn RSS.",
         )
         return {**err, "feed": await run_db_sync(rss_repo.get_feed, feed_id)}
+    finally:
+        await in_flight_registry.release(lock_key)
 
 
 async def refresh_all_enabled_feeds(

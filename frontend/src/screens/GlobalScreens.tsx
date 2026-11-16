@@ -3,6 +3,7 @@ import {
   ApiClientError,
   fetchCachedTrendsApi,
   fetchGlobalCategoriesApi,
+  fetchGlobalOverviewApi,
   fetchRssArticlesApi,
   fetchRssPhrasesApi,
   fetchSearchSessionDetailApi,
@@ -14,6 +15,7 @@ import {
 } from '../api/client';
 import { formatDateTimeVi, mapYoutubeVideoDtoToItem } from '../api/mappers';
 import type {
+  GlobalOverviewDto,
   RssArticleDto,
   RssPhrasesResponseDto,
   SearchSessionDto,
@@ -38,22 +40,55 @@ export const GlobalOverviewScreen: React.FC = () => {
     systemSettings,
     quotaStatus,
     projects,
+    ideas,
     refreshWorkspaceStatus,
     setCreateProjectModalOpen,
     setLegalModalOpen,
   } = usePrototypeWorkspace();
   const [refreshing, setRefreshing] = useState(false);
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const [overviewState, setOverviewState] = useState<{
+    key: string;
+    data: GlobalOverviewDto | null;
+    error: string | null;
+  }>({ key: '', data: null, error: null });
+
+  const overviewKey = `${reloadNonce}:${projects.length}:${ideas.length}`;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchGlobalOverviewApi(controller.signal)
+      .then((res) => {
+        if (!controller.signal.aborted) {
+          setOverviewState({ key: overviewKey, data: res, error: null });
+        }
+      })
+      .catch((err) => {
+        if (isAbortError(err) || controller.signal.aborted) return;
+        setOverviewState({
+          key: overviewKey,
+          data: null,
+          error: err instanceof ApiClientError ? err.message : 'Không tải được số liệu tổng quan.',
+        });
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [overviewKey]);
+
+  const ov = overviewState.key === overviewKey ? overviewState.data : overviewState.data;
+  const activeQuota = ov?.quota ?? quotaStatus;
 
   const searchPct = Math.min(
     100,
-    quotaStatus.searchQueries.limit > 0
-      ? (quotaStatus.searchQueries.used / quotaStatus.searchQueries.limit) * 100
+    activeQuota.searchQueries.limit > 0
+      ? (activeQuota.searchQueries.used / activeQuota.searchQueries.limit) * 100
       : 0,
   );
   const generalPct = Math.min(
     100,
-    quotaStatus.generalData.limit > 0
-      ? (quotaStatus.generalData.used / quotaStatus.generalData.limit) * 100
+    activeQuota.generalData.limit > 0
+      ? (activeQuota.generalData.used / activeQuota.generalData.limit) * 100
       : 0,
   );
 
@@ -93,6 +128,7 @@ export const GlobalOverviewScreen: React.FC = () => {
                 setRefreshing(true);
                 try {
                   await refreshWorkspaceStatus();
+                  setReloadNonce((n) => n + 1);
                 } finally {
                   setRefreshing(false);
                 }
@@ -113,19 +149,19 @@ export const GlobalOverviewScreen: React.FC = () => {
           <div className="rs-grid-3">
             <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <h2 style={{ margin: 0, fontSize: '15px' }}>Hạn mức YouTube API (PT: {quotaStatus.ptDate})</h2>
+                <h2 style={{ margin: 0, fontSize: '15px' }}>Hạn mức YouTube API (PT: {activeQuota.ptDate})</h2>
                 <span className="rs-badge">Reset 00:00 PT</span>
               </div>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: '13px', marginBottom: 4 }}>
                   <span>Search Queries (<code>search.list</code>)</span>
                   <strong className="rs-tabular" style={{ whiteSpace: 'nowrap' }}>
-                    {quotaStatus.searchQueries.used} / {quotaStatus.searchQueries.limit} lượt
+                    {activeQuota.searchQueries.used} / {activeQuota.searchQueries.limit} lượt
                   </strong>
                 </div>
                 <div className="rs-progress-track">
                   <div
-                    className={`rs-progress-fill ${quotaStatus.searchQueries.warning ? 'is-danger' : ''}`}
+                    className={`rs-progress-fill ${activeQuota.searchQueries.warning ? 'is-danger' : ''}`}
                     style={{ width: `${searchPct}%` }}
                   />
                 </div>
@@ -134,13 +170,13 @@ export const GlobalOverviewScreen: React.FC = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: '13px', marginBottom: 4 }}>
                   <span>General Data API (<code>videos</code> / <code>channels</code>)</span>
                   <strong className="rs-tabular" style={{ whiteSpace: 'nowrap' }}>
-                    {quotaStatus.generalData.used.toLocaleString('vi-VN')} /{' '}
-                    {quotaStatus.generalData.limit.toLocaleString('vi-VN')}
+                    {activeQuota.generalData.used.toLocaleString('vi-VN')} /{' '}
+                    {activeQuota.generalData.limit.toLocaleString('vi-VN')}
                   </strong>
                 </div>
                 <div className="rs-progress-track">
                   <div
-                    className={`rs-progress-fill ${quotaStatus.generalData.warning ? 'is-danger' : ''}`}
+                    className={`rs-progress-fill ${activeQuota.generalData.warning ? 'is-danger' : ''}`}
                     style={{ width: `${generalPct}%` }}
                   />
                 </div>
@@ -152,7 +188,7 @@ export const GlobalOverviewScreen: React.FC = () => {
 
             <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <h2 style={{ margin: 0, fontSize: '15px' }}>Cấu hình cục bộ &amp; Pháp lý</h2>
+                <h2 style={{ margin: 0, fontSize: '15px' }}>Bộ nhớ đệm 30 ngày &amp; Pháp lý</h2>
                 <span className={`rs-badge ${systemSettings.autoRefreshEnabled ? 'rs-badge-success' : ''}`}>
                   {systemSettings.autoRefreshEnabled ? 'Tự động làm mới: Bật' : 'Tự động làm mới: Tắt'}
                 </span>
@@ -166,11 +202,12 @@ export const GlobalOverviewScreen: React.FC = () => {
                   <strong>{systemSettings.legalConsentAccepted ? 'Đã xác nhận' : 'Chưa xác nhận'}</strong>
                 </div>
                 <div className="rs-tabular">
-                  Khu vực mặc định: <strong>{systemSettings.defaultRegionCode}</strong> · Ngôn ngữ:{' '}
-                  <strong>{systemSettings.defaultRelevanceLanguage}</strong>
+                  Cache còn hạn &lt;=30d: <strong>{ov?.validVideosCount ?? 0}</strong> video · Sắp hết hạn &lt;=5d:{' '}
+                  <strong>{ov?.expiringSoonVideosCount ?? 0}</strong>
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>
                   {backendOnline ? `Đồng bộ SQLite gần nhất: ${lastSyncAt ?? 'Vừa xong'}` : 'Đang ngoại tuyến cục bộ'}
+                  {ov?.scheduler.lastPurgeAtUtc ? ` · Dọn TTL: ${formatDateTimeVi(ov.scheduler.lastPurgeAtUtc)}` : ''}
                 </div>
               </div>
               <div style={{ marginTop: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -195,17 +232,20 @@ export const GlobalOverviewScreen: React.FC = () => {
 
             <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2 style={{ margin: 0, fontSize: '15px' }}>Không gian Project trên máy ({projects.length})</h2>
+                <h2 style={{ margin: 0, fontSize: '15px' }}>Project ({projects.length}) &amp; Kho ý tưởng</h2>
                 <span className="rs-badge">SQLite Local</span>
+              </div>
+              <div className="rs-tabular" style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)' }}>
+                Kho ý tưởng chung: <strong>{ov?.ideasTotalCount ?? ideas.filter((i) => i.inGlobalVault).length}</strong> ý tưởng (
+                <strong>{ov?.ideasUnlinkedCount ?? 0}</strong> chưa gắn Project)
               </div>
               {projects.length === 0 ? (
                 <p style={{ margin: 0, fontSize: '13.5px', color: 'var(--rs-text-secondary)' }}>
-                  Hiện có <strong>0 Project</strong> trong cơ sở dữ liệu. Toàn bộ tính năng Global Research vẫn sẵn sàng
-                  hoặc bạn có thể tạo Project đầu tiên ngay bây giờ.
+                  Hiện có <strong>0 Project</strong>. Bạn vẫn dùng được toàn bộ Global Research (G2–G5) hoặc tạo Project bất kỳ lúc nào.
                 </p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {projects.slice(0, 4).map((p) => (
+                  {projects.slice(0, 3).map((p) => (
                     <div
                       key={p.id}
                       style={{
@@ -229,7 +269,7 @@ export const GlobalOverviewScreen: React.FC = () => {
                   ))}
                 </div>
               )}
-              <div style={{ marginTop: 'auto', display: 'flex', gap: 8 }}>
+              <div style={{ marginTop: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="rs-btn rs-btn-sm rs-btn-primary"
@@ -237,29 +277,63 @@ export const GlobalOverviewScreen: React.FC = () => {
                 >
                   + Tạo Project mới
                 </button>
+                <button
+                  type="button"
+                  className="rs-btn rs-btn-sm rs-btn-secondary"
+                  onClick={() => navigate('global-ideas')}
+                >
+                  Mở G5 Kho ý tưởng
+                </button>
               </div>
             </section>
           </div>
 
-          <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <h2 style={{ margin: 0, fontSize: '15.5px' }}>Lộ trình &amp; Lối tắt Phân khu Global Research</h2>
-            <div className="rs-grid-2">
-              <div className="rs-card-subtle" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <div className="rs-grid-2">
+            <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <div>
-                  <strong>G4. Tin tức &amp; thảo luận RSS</strong>
-                  <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
-                    Đọc RSS/Atom ngoài YouTube (0 quota) · Kết nối thật ở M3 (T10–T11)
-                  </div>
+                  <h2 style={{ margin: 0, fontSize: '15.5px' }}>Tin tức RSS mới nhất ({ov?.rssSummary.articlesCount ?? 0} bài)</h2>
+                  <span style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>
+                    Nguồn: RSS (Dữ liệu ngoài YouTube) · {ov?.rssSummary.enabled ?? 0}/{ov?.rssSummary.total ?? 0} nguồn bật ·{' '}
+                    {ov?.rssSummary.errorCount ?? 0} nguồn lỗi
+                  </span>
                 </div>
                 <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('global-news')}>
-                  Mở G4
+                  Mở G4 RSS →
                 </button>
               </div>
+              {!ov || ov.latestRssArticles.length === 0 ? (
+                <span style={{ fontSize: '13px', color: 'var(--rs-text-muted)' }}>
+                  Chưa có bài viết RSS nào được nạp. Thêm nguồn RSS công khai ở G4 Tin tức &amp; thảo luận (0 quota YouTube).
+                </span>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {ov.latestRssArticles.map((art) => (
+                    <div key={art.id} className="rs-card-subtle">
+                      <button
+                        type="button"
+                        className="rs-title-link"
+                        style={{ fontSize: '13.5px' }}
+                        onClick={() => navigate('article-detail', { params: { articleId: art.id } })}
+                      >
+                        {art.title}
+                      </button>
+                      <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)', marginTop: 2 }}>
+                        {art.feedName} · {formatDateTimeVi(art.publishedAt ?? art.fetchedAt)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <h2 style={{ margin: 0, fontSize: '15.5px' }}>Lối tắt Phân khu Global Research</h2>
               <div className="rs-card-subtle" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                 <div>
-                  <strong>G2. Khám phá xu hướng &amp; G3. Nghiên cứu tự do</strong>
+                  <strong>G2. Khám phá xu hướng YouTube</strong>
                   <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
-                    YouTube Data API v3 Standard Mode · Kết nối thật ở M3 (T09, T12)
+                    Biểu đồ mostPopular theo quốc gia/danh mục (1 unit General Data API · 0 Search Queries)
                   </div>
                 </div>
                 <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('global-trends')}>
@@ -268,9 +342,20 @@ export const GlobalOverviewScreen: React.FC = () => {
               </div>
               <div className="rs-card-subtle" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                 <div>
+                  <strong>G3. Nghiên cứu tự do ({ov?.validSearchSessionsCount ?? 0} phiên cache &lt;=30d)</strong>
+                  <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
+                    Tìm thủ công 1 lượt Search Queries · Mở lại phiên đã lưu tốn 0 quota
+                  </div>
+                </div>
+                <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('global-search')}>
+                  Mở G3
+                </button>
+              </div>
+              <div className="rs-card-subtle" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                <div>
                   <strong>G5. Kho ý tưởng chung (Global Vault)</strong>
                   <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
-                    Lưu ý tưởng vĩnh viễn không cần Project · Kết nối thật ở M4 (T13–T14)
+                    Lưu ý tưởng vĩnh viễn không cần Project · Gắn đa Project độc lập
                   </div>
                 </div>
                 <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('global-ideas')}>
@@ -288,8 +373,8 @@ export const GlobalOverviewScreen: React.FC = () => {
                   Mở Cài đặt
                 </button>
               </div>
-            </div>
-          </section>
+            </section>
+          </div>
         </>
       )}
     </div>

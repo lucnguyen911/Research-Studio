@@ -8,7 +8,8 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.db.connection import run_db_sync
-from app.repositories import project_repo
+from app.repositories import project_repo, rss_repo, settings_repo, youtube_repo
+from app.services import competitor_service, quota_service, rss_service
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
@@ -91,3 +92,52 @@ async def delete_project_confirmed(project_id: str, payload: DeleteProjectReques
 async def update_project_rss_links(project_id: str, payload: UpdateProjectRssFeedsRequest) -> dict[str, object]:
     project = await run_db_sync(project_repo.set_project_rss_feeds, project_id, payload.feedIds)
     return {"project": project}
+
+
+@router.get("/{project_id}/overview")
+async def read_project_overview(project_id: str) -> dict[str, object]:
+    def _load() -> dict[str, object]:
+        project = project_repo.get_project(project_id)
+        summary = youtube_repo.get_project_overview_summary(project_id)
+        latest_articles = rss_repo.list_articles(project_id=project_id, limit=4) if project["linkedFeedIds"] else []
+        return {
+            **summary,
+            "latestRssArticles": latest_articles,
+        }
+
+    return await run_db_sync(_load)
+
+
+@router.post("/{project_id}/refresh")
+async def refresh_project_workspace(project_id: str) -> dict[str, object]:
+    """Refresh linked enabled RSS feeds and active competitor channels (if API key & legal ready)."""
+    project = await run_db_sync(project_repo.get_project, project_id)
+    rss_results: list[dict[str, object]] = []
+    for fid in project["linkedFeedIds"]:
+        try:
+            feed = await run_db_sync(rss_repo.get_feed, fid)
+            if feed.get("enabled"):
+                rss_results.append(await rss_service.refresh_single_feed(fid))
+        except Exception:
+            continue
+
+    settings = await run_db_sync(settings_repo.get_public_settings)
+    competitor_result: dict[str, object] | None = None
+    competitors_skipped_reason: str | None = None
+    if settings["apiKeyStatus"] == "configured" and settings["legalConsentAccepted"]:
+        competitor_result = await competitor_service.refresh_project_competitors(project_id)
+    else:
+        competitors_skipped_reason = "api_key_or_legal_not_ready"
+
+    def _finish() -> dict[str, object]:
+        summary = youtube_repo.get_project_overview_summary(project_id)
+        latest_articles = rss_repo.list_articles(project_id=project_id, limit=4) if project["linkedFeedIds"] else []
+        return {
+            "overview": {**summary, "latestRssArticles": latest_articles},
+            "rssRefreshedCount": len(rss_results),
+            "competitorSummary": competitor_result,
+            "competitorsSkippedReason": competitors_skipped_reason,
+            "quota": quota_service.get_quota_status(),
+        }
+
+    return await run_db_sync(_finish)

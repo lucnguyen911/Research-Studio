@@ -704,3 +704,239 @@ def list_project_breakout_videos(
         "totalCount": len(candidates),
         "items": candidates,
     }
+
+
+def get_global_overview_summary(*, now_utc: datetime | None = None) -> dict[str, Any]:
+    """Read lightweight global SQLite counts using 0 YouTube quota."""
+    utc_now = _normalize_utc(now_utc)
+    now_iso = utc_now.isoformat()
+    soon_iso = (utc_now + timedelta(days=5)).isoformat()
+    with read_db() as conn:
+        valid_videos = int(
+            conn.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM youtube_videos
+                WHERE api_purged_at IS NULL AND api_expires_at IS NOT NULL AND api_expires_at > ?
+                """,
+                (now_iso,),
+            ).fetchone()["cnt"]
+        )
+        expiring_soon_videos = int(
+            conn.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM youtube_videos
+                WHERE api_purged_at IS NULL AND api_expires_at IS NOT NULL
+                  AND api_expires_at > ? AND api_expires_at <= ?
+                """,
+                (now_iso, soon_iso),
+            ).fetchone()["cnt"]
+        )
+        valid_channels = int(
+            conn.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM youtube_channels
+                WHERE api_purged_at IS NULL AND api_expires_at IS NOT NULL AND api_expires_at > ?
+                """,
+                (now_iso,),
+            ).fetchone()["cnt"]
+        )
+        valid_sessions = int(
+            conn.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM search_sessions
+                WHERE query_text NOT LIKE '__TREND__:%' AND api_expires_at > ?
+                """,
+                (now_iso,),
+            ).fetchone()["cnt"]
+        )
+        ideas_total = int(
+            conn.execute("SELECT COUNT(*) AS cnt FROM ideas WHERE in_global_vault = 1").fetchone()["cnt"]
+        )
+        ideas_unlinked = int(
+            conn.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM ideas i
+                WHERE i.in_global_vault = 1
+                  AND NOT EXISTS (SELECT 1 FROM project_ideas pi WHERE pi.idea_id = i.id)
+                """
+            ).fetchone()["cnt"]
+        )
+        projects_count = int(conn.execute("SELECT COUNT(*) AS cnt FROM projects").fetchone()["cnt"])
+        rss_row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS enabled_cnt,
+                SUM(CASE WHEN last_status = 'error' THEN 1 ELSE 0 END) AS error_cnt
+            FROM rss_feeds
+            """
+        ).fetchone()
+        rss_articles_count = int(conn.execute("SELECT COUNT(*) AS cnt FROM rss_articles").fetchone()["cnt"])
+
+    return {
+        "validVideosCount": valid_videos,
+        "expiringSoonVideosCount": expiring_soon_videos,
+        "validChannelsCount": valid_channels,
+        "validSearchSessionsCount": valid_sessions,
+        "ideasTotalCount": ideas_total,
+        "ideasUnlinkedCount": ideas_unlinked,
+        "projectsCount": projects_count,
+        "rssSummary": {
+            "total": int(rss_row["total"] or 0),
+            "enabled": int(rss_row["enabled_cnt"] or 0),
+            "errorCount": int(rss_row["error_cnt"] or 0),
+            "articlesCount": rss_articles_count,
+        },
+    }
+
+
+def get_project_overview_summary(project_id: str, *, now_utc: datetime | None = None) -> dict[str, Any]:
+    """Read real per-project SQLite summary counters keeping unknown video format strictly separated."""
+    utc_now = _normalize_utc(now_utc)
+    now_iso = utc_now.isoformat()
+    recent_cutoff = (utc_now - timedelta(days=7)).isoformat()
+
+    with read_db() as conn:
+        proj = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if proj is None:
+            raise AppError("PROJECT_NOT_FOUND", "Không tìm thấy Project yêu cầu.", status_code=404)
+
+        ch_row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_cnt,
+                SUM(CASE WHEN status = 'paused' THEN 1 ELSE 0 END) AS paused_cnt,
+                SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error_cnt
+            FROM project_channels
+            WHERE project_id = ?
+            """,
+            (project_id,),
+        ).fetchone()
+
+        vid_row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS total_valid,
+                SUM(CASE WHEN v.source_format_status = 'long_form' THEN 1 ELSE 0 END) AS long_form_cnt,
+                SUM(CASE WHEN v.source_format_status = 'shorts' THEN 1 ELSE 0 END) AS shorts_cnt,
+                SUM(CASE WHEN v.source_format_status = 'unknown' THEN 1 ELSE 0 END) AS unknown_cnt
+            FROM youtube_videos v
+            WHERE v.channel_id IN (SELECT channel_id FROM project_channels WHERE project_id = ?)
+              AND v.api_purged_at IS NULL
+              AND v.api_expires_at IS NOT NULL
+              AND v.api_expires_at > ?
+            """,
+            (project_id, now_iso),
+        ).fetchone()
+
+        breakout_flagged = int(
+            conn.execute(
+                "SELECT COUNT(*) AS cnt FROM project_videos WHERE project_id = ? AND is_user_breakout = 1",
+                (project_id,),
+            ).fetchone()["cnt"]
+        )
+
+        kw_row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN s.id IS NOT NULL AND s.api_expires_at > ? THEN 1 ELSE 0 END) AS scanned_valid
+            FROM project_keywords pk
+            LEFT JOIN search_sessions s ON s.id = pk.last_session_id
+            WHERE pk.project_id = ?
+            """,
+            (now_iso, project_id),
+        ).fetchone()
+
+        rss_feed_row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS linked_feeds,
+                SUM(CASE WHEN f.last_status = 'error' THEN 1 ELSE 0 END) AS broken_feeds
+            FROM project_rss_feeds prf
+            JOIN rss_feeds f ON f.id = prf.feed_id
+            WHERE prf.project_id = ?
+            """,
+            (project_id,),
+        ).fetchone()
+
+        recent_rss_articles = int(
+            conn.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM rss_articles a
+                JOIN project_rss_feeds prf ON prf.feed_id = a.feed_id
+                WHERE prf.project_id = ? AND COALESCE(a.published_at, a.fetched_at) >= ?
+                """,
+                (project_id, recent_cutoff),
+            ).fetchone()["cnt"]
+        )
+
+        idea_rows = conn.execute(
+            """
+            SELECT pi.status, COUNT(*) AS cnt
+            FROM project_ideas pi
+            WHERE pi.project_id = ?
+            GROUP BY pi.status
+            """,
+            (project_id,),
+        ).fetchall()
+        funnel = {"new": 0, "researching": 0, "approved": 0, "produced": 0, "skipped": 0}
+        for ir in idea_rows:
+            st = str(ir["status"])
+            if st in funnel:
+                funnel[st] = int(ir["cnt"])
+
+        recent_idea_rows = conn.execute(
+            """
+            SELECT i.id, i.title, pi.status, pi.priority, pi.project_angle, pi.status_updated_at
+            FROM project_ideas pi
+            JOIN ideas i ON i.id = pi.idea_id
+            WHERE pi.project_id = ?
+            ORDER BY pi.status_updated_at DESC
+            LIMIT 5
+            """,
+            (project_id,),
+        ).fetchall()
+
+    return {
+        "projectId": project_id,
+        "competitorChannels": {
+            "total": int(ch_row["total"] or 0),
+            "active": int(ch_row["active_cnt"] or 0),
+            "paused": int(ch_row["paused_cnt"] or 0),
+            "error": int(ch_row["error_cnt"] or 0),
+        },
+        "competitorVideos": {
+            "totalValid": int(vid_row["total_valid"] or 0),
+            "longForm": int(vid_row["long_form_cnt"] or 0),
+            "shorts": int(vid_row["shorts_cnt"] or 0),
+            "unknown": int(vid_row["unknown_cnt"] or 0),
+        },
+        "breakoutFlaggedCount": breakout_flagged,
+        "keywords": {
+            "total": int(kw_row["total"] or 0),
+            "scannedValid": int(kw_row["scanned_valid"] or 0),
+        },
+        "rss": {
+            "linkedFeeds": int(rss_feed_row["linked_feeds"] or 0),
+            "brokenFeeds": int(rss_feed_row["broken_feeds"] or 0),
+            "recentArticlesCount": recent_rss_articles,
+        },
+        "ideas": {
+            "total": sum(funnel.values()),
+            "byStatus": funnel,
+            "recent": [
+                {
+                    "id": r["id"],
+                    "title": r["title"],
+                    "status": r["status"],
+                    "priority": r["priority"],
+                    "projectAngle": r["project_angle"],
+                    "statusUpdatedAt": r["status_updated_at"],
+                }
+                for r in recent_idea_rows
+            ],
+        },
+    }

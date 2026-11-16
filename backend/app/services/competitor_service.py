@@ -15,6 +15,7 @@ from app.core.errors import AppError
 from app.db.connection import read_db, run_db_sync, write_db
 from app.repositories import project_repo, youtube_repo
 from app.services import quota_service
+from app.services.scheduler_service import in_flight_registry
 
 _CHANNEL_ID_RE = re.compile(r"^UC[A-Za-z0-9_-]{20,40}$")
 _HANDLE_RE = re.compile(r"^@[A-Za-z0-9._-]{2,80}$")
@@ -291,15 +292,28 @@ async def refresh_competitor_channel(
     now_utc: datetime | None = None,
 ) -> dict[str, Any]:
     """Refresh one canonical channel and up to 40 recent videos once for all Projects sharing it."""
+    lock_key = f"channel:{channel_id}"
+    if not await in_flight_registry.try_acquire(lock_key):
+        if is_auto_refresh:
+            return {"channelId": channel_id, "videosFetched": 0, "skippedInFlight": True}
+        raise AppError(
+            code="REFRESH_IN_PROGRESS",
+            message="Kênh đối thủ này đang được làm mới, vui lòng đợi hoàn tất.",
+            status_code=409,
+        )
+
     utc_now = _normalize_now(now_utc)
-    bundle = await _fetch_and_persist_channel_bundle(
-        channel_id=channel_id,
-        handle=None,
-        is_auto_refresh=is_auto_refresh,
-        transport=transport,
-        retry_backoff_sec=retry_backoff_sec,
-        now_utc=utc_now,
-    )
+    try:
+        bundle = await _fetch_and_persist_channel_bundle(
+            channel_id=channel_id,
+            handle=None,
+            is_auto_refresh=is_auto_refresh,
+            transport=transport,
+            retry_backoff_sec=retry_backoff_sec,
+            now_utc=utc_now,
+        )
+    finally:
+        await in_flight_registry.release(lock_key)
 
     def _clear_errors() -> None:
         with write_db() as conn:

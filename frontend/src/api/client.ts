@@ -7,12 +7,15 @@ import type {
   CreateProjectPayload,
   DeleteProjectResultDto,
   FreeSearchResponseDto,
+  GlobalOverviewDto,
   IdeaDto,
   KeywordDetailResponseDto,
   ProjectCompetitorsResponseDto,
   ProjectDto,
   ProjectKeywordDto,
   ProjectKeywordsResponseDto,
+  ProjectOverviewDto,
+  ProjectRefreshResponseDto,
   PurgeCacheResultDto,
   QuotaStatusDto,
   RssArticleDto,
@@ -21,6 +24,7 @@ import type {
   RssRefreshAllResultDto,
   RssSingleRefreshResultDto,
   ScanKeywordsResponseDto,
+  SchedulerStatusDto,
   SearchSessionDetailDto,
   SearchSessionDto,
   SystemSettingsDto,
@@ -817,6 +821,37 @@ export async function scanProjectKeywordsApi(
       signal,
     },
   );
+}
+
+export async function fetchGlobalOverviewApi(signal?: AbortSignal): Promise<GlobalOverviewDto> {
+  return apiRequest<GlobalOverviewDto>('/api/v1/global/overview', { signal });
+}
+
+export async function fetchProjectOverviewApi(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ProjectOverviewDto> {
+  return apiRequest<ProjectOverviewDto>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/overview`,
+    { signal },
+  );
+}
+
+export async function refreshProjectWorkspaceApi(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ProjectRefreshResponseDto> {
+  return apiRequest<ProjectRefreshResponseDto>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/refresh`,
+    {
+      method: 'POST',
+      signal,
+    },
+  );
+}
+
+export async function fetchSchedulerStatusApi(signal?: AbortSignal): Promise<SchedulerStatusDto> {
+  return apiRequest<SchedulerStatusDto>('/api/v1/system/scheduler-status', { signal });
 }
 
 

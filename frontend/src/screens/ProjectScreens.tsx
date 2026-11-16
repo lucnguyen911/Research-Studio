@@ -8,8 +8,10 @@ import {
   fetchProjectBreakoutVideosApi,
   fetchProjectCompetitorsApi,
   fetchProjectKeywordsApi,
+  fetchProjectOverviewApi,
   isAbortError,
   refreshAllProjectCompetitorsApi,
+  refreshProjectWorkspaceApi,
   refreshSingleProjectCompetitorApi,
   scanProjectKeywordsApi,
   updateProjectCompetitorApi,
@@ -20,6 +22,7 @@ import type {
   CompetitorChannelDto,
   KeywordDetailResponseDto,
   ProjectKeywordsResponseDto,
+  ProjectOverviewDto,
 } from '../api/types';
 import { IDEA_STATUS_LABELS, formatInt } from '../prototype/demoData';
 import type { IdeaPriority, IdeaStatus, ProjectItem, VideoItem } from '../prototype/types';
@@ -57,7 +60,47 @@ const NoProjectEmpty: React.FC = () => {
 export const ProjectOverviewScreen: React.FC = () => {
   const project = useActiveProject();
   const { navigate } = useAppNavigation();
-  const { isBootstrapping } = usePrototypeWorkspace();
+  const { isBootstrapping, backendOnline, syncQuotaStatus, pushToast } = usePrototypeWorkspace();
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [ovState, setOvState] = useState<{
+    key: string;
+    data: ProjectOverviewDto | null;
+    error: string | null;
+  }>({ key: '', data: null, error: null });
+  const refreshAbortRef = useRef<AbortController | null>(null);
+
+  const projectId = project?.id ?? '';
+  const reqKey = `${projectId}:${reloadNonce}`;
+
+  useEffect(() => {
+    if (!projectId) return undefined;
+    const controller = new AbortController();
+    fetchProjectOverviewApi(projectId, controller.signal)
+      .then((res) => {
+        if (!controller.signal.aborted) {
+          setOvState({ key: reqKey, data: res, error: null });
+        }
+      })
+      .catch((err) => {
+        if (isAbortError(err) || controller.signal.aborted) return;
+        setOvState({
+          key: reqKey,
+          data: null,
+          error: err instanceof ApiClientError ? err.message : 'Không tải được số liệu Tổng quan dự án.',
+        });
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [projectId, reqKey]);
+
+  useEffect(
+    () => () => {
+      refreshAbortRef.current?.abort();
+    },
+    [],
+  );
 
   if (isBootstrapping) {
     return (
@@ -76,6 +119,38 @@ export const ProjectOverviewScreen: React.FC = () => {
         ? 'Shorts'
         : 'Tất cả định dạng';
 
+  const loadingOv = ovState.key !== reqKey && ovState.error === null;
+  const ov = ovState.key === reqKey ? ovState.data : null;
+
+  const handleRefreshProject = () => {
+    refreshAbortRef.current?.abort();
+    const controller = new AbortController();
+    refreshAbortRef.current = controller;
+    setRefreshing(true);
+    void refreshProjectWorkspaceApi(project.id, controller.signal)
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        setOvState({ key: reqKey, data: res.overview, error: null });
+        void syncQuotaStatus();
+        pushToast(
+          'success',
+          `Đã đồng bộ Project (RSS: ${res.rssRefreshedCount} nguồn${
+            res.competitorSummary ? `, Đối thủ: ${res.competitorSummary.okCount}/${res.competitorSummary.refreshedCount} kênh` : ''
+          }).`,
+        );
+      })
+      .catch((err) => {
+        if (isAbortError(err)) {
+          pushToast('success', 'Đã hủy lệnh làm mới Project.');
+          return;
+        }
+        pushToast('error', err instanceof ApiClientError ? err.message : 'Không thể làm mới Project.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRefreshing(false);
+      });
+  };
+
   return (
     <div className="rs-container">
       <div className="rs-page-header">
@@ -91,67 +166,177 @@ export const ProjectOverviewScreen: React.FC = () => {
             {project.description || 'Chưa có mô tả định hướng kênh. Có thể bổ sung trong Cài đặt dự án (P6).'}
           </p>
         </div>
-        <button type="button" className="rs-btn rs-btn-secondary" onClick={() => navigate('project-settings')}>
-          Chỉnh sửa Cài đặt dự án (P6)
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {refreshing ? (
+            <button
+              type="button"
+              className="rs-btn rs-btn-danger"
+              onClick={() => {
+                refreshAbortRef.current?.abort();
+                setRefreshing(false);
+              }}
+            >
+              Hủy (Cancel)
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="rs-btn rs-btn-primary"
+              disabled={!backendOnline}
+              onClick={handleRefreshProject}
+            >
+              Làm mới RSS &amp; Đối thủ Project
+            </button>
+          )}
+          <button type="button" className="rs-btn rs-btn-secondary" onClick={() => navigate('project-settings')}>
+            Cài đặt dự án (P6)
+          </button>
+        </div>
       </div>
 
       <GlobalModeBanners requiresYouTubeApi />
 
-      <div className="rs-grid-3">
-        <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <h2 style={{ margin: 0, fontSize: '15px' }}>Thông số mục tiêu Project</h2>
-          <div style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div>
-              Mã Project: <code className="rs-mono">{project.id}</code>
-            </div>
-            <div>
-              Thị trường / Ngôn ngữ: <strong>{project.regionCode} / {project.relevanceLanguage}</strong>
-            </div>
-            <div>
-              Định dạng trọng tâm: <strong>{formatLabel}</strong>
-            </div>
-            <div>
-              Cập nhật gần nhất: <span className="rs-tabular">{project.updatedAt}</span>
-            </div>
-          </div>
-        </section>
+      {ovState.error ? (
+        <EmptyStateCard
+          title="Không đọc được số liệu tổng quan Project"
+          description={ovState.error}
+          actionLabel="Thử lại"
+          onAction={() => setReloadNonce((n) => n + 1)}
+        />
+      ) : loadingOv || !ov ? (
+        <LoadingSkeletonCard label="Đang tổng hợp số liệu từ SQLite cho Project..." />
+      ) : (
+        <>
+          <div className="rs-grid-3">
+            <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ margin: 0, fontSize: '15px' }}>Đối thủ &amp; Video (Tách 3 định dạng)</h2>
+                <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-competitors')}>
+                  Mở P2
+                </button>
+              </div>
+              <div className="rs-tabular" style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div>
+                  Kênh đối thủ: <strong>{ov.competitorChannels.total}</strong> ({ov.competitorChannels.active} bật ·{' '}
+                  {ov.competitorChannels.paused} dừng · {ov.competitorChannels.error} lỗi)
+                </div>
+                <div>
+                  Video &lt;=30d còn hạn: <strong>{ov.competitorVideos.totalValid}</strong> (Bứt phá thủ công:{' '}
+                  <strong>{ov.breakoutFlaggedCount}</strong>)
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                  <span className="rs-badge">Video dài: {ov.competitorVideos.longForm}</span>
+                  <span className="rs-badge">Shorts: {ov.competitorVideos.shorts}</span>
+                  <span className="rs-badge">Chưa xác định &lt;=180s: {ov.competitorVideos.unknown}</span>
+                </div>
+                <span style={{ fontSize: '11.5px', color: 'var(--rs-text-muted)' }}>
+                  Nhóm Chưa xác định tuyệt đối không bị gộp vào Video dài hoặc Shorts.
+                </span>
+              </div>
+              <div style={{ marginTop: 'auto' }}>
+                <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => navigate('project-breakout')}>
+                  Sàng lọc Video bứt phá (P3) →
+                </button>
+              </div>
+            </section>
 
-        <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <h2 style={{ margin: 0, fontSize: '15px' }}>Nguồn RSS liên kết &amp; Không gian Ý tưởng</h2>
-          <div className="rs-tabular" style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)' }}>
-            <div>
-              Nguồn RSS đang gắn với Project: <strong>{project.linkedFeedIds.length}</strong> nguồn
-            </div>
-            <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)', marginTop: 4 }}>
-              Tổng hợp số liệu Đối thủ (P2), Từ khóa (P4) và Phễu Ý tưởng 5 trạng thái (P5) sẽ tự động hiển thị sau khi hoàn tất Milestone 3–6.
-            </div>
-          </div>
-          <div style={{ marginTop: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-settings')}>
-              Quản lý ở P6
-            </button>
-            <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => navigate('project-ideas')}>
-              Xem trước Quản lý ý tưởng (P5)
-            </button>
-          </div>
-        </section>
+            <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ margin: 0, fontSize: '15px' }}>Phễu Ý tưởng 5 trạng thái ({ov.ideas.total})</h2>
+                <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-ideas')}>
+                  Mở P5
+                </button>
+              </div>
+              <div className="rs-tabular" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {(Object.keys(IDEA_STATUS_LABELS) as IdeaStatus[]).map((st) => (
+                  <span key={st} className="rs-badge">
+                    {IDEA_STATUS_LABELS[st]}: {ov.ideas.byStatus[st]}
+                  </span>
+                ))}
+              </div>
+              {ov.ideas.recent.length === 0 ? (
+                <span style={{ fontSize: '13px', color: 'var(--rs-text-muted)' }}>
+                  Project chưa gắn ý tưởng nào. Hãy lưu ý tưởng từ P2, P3, P4 hoặc G5 Kho ý tưởng chung.
+                </span>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {ov.ideas.recent.slice(0, 3).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="rs-title-link"
+                      style={{ fontSize: '13px', textAlign: 'left' }}
+                      onClick={() => navigate('idea-detail', { params: { ideaId: item.id } })}
+                    >
+                      • {item.title} ({IDEA_STATUS_LABELS[item.status]})
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: 'auto' }}>
+                <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => navigate('project-ideas')}>
+                  Quản lý Ý tưởng (P5) →
+                </button>
+              </div>
+            </section>
 
-        <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <h2 style={{ margin: 0, fontSize: '15px' }}>Công cụ nghiên cứu thuộc Project</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-            <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-competitors')}>
-              P2 · Theo dõi đối thủ (xem trước M5)
-            </button>
-            <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-breakout')}>
-              P3 · Video bứt phá Standard Mode (xem trước M5)
-            </button>
-            <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-keywords')}>
-              P4 · Nghiên cứu từ khóa + RSS (xem trước M5)
-            </button>
+            <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ margin: 0, fontSize: '15px' }}>Từ khóa &amp; RSS liên kết</h2>
+                <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-keywords')}>
+                  Mở P4
+                </button>
+              </div>
+              <div className="rs-tabular" style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div>
+                  Từ khóa nghiên cứu: <strong>{ov.keywords.total}</strong> ({ov.keywords.scannedValid} đã quét còn hạn 30d)
+                </div>
+                <div>
+                  Nguồn RSS gắn Project: <strong>{ov.rss.linkedFeeds}</strong> nguồn ({ov.rss.brokenFeeds} lỗi ·{' '}
+                  <strong>{ov.rss.recentArticlesCount}</strong> bài 7d)
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>
+                  Mã Project: <code className="rs-mono">{project.id}</code> · Cập nhật: {formatDateTimeVi(project.updatedAt)}
+                </div>
+              </div>
+              <div style={{ marginTop: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => navigate('project-keywords')}>
+                  Nghiên cứu từ khóa (P4)
+                </button>
+                <button type="button" className="rs-btn rs-btn-sm rs-btn-secondary" onClick={() => navigate('project-settings')}>
+                  Gắn RSS ở P6
+                </button>
+              </div>
+            </section>
           </div>
-        </section>
-      </div>
+
+          {ov.latestRssArticles.length > 0 && (
+            <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ margin: 0, fontSize: '15px' }}>Tin RSS mới thuộc nguồn của {project.name}</h2>
+                <span className="rs-badge rs-badge-success">Nguồn: RSS (Dữ liệu ngoài YouTube)</span>
+              </div>
+              <div className="rs-grid-2">
+                {ov.latestRssArticles.map((art) => (
+                  <div key={art.id} className="rs-card-subtle">
+                    <button
+                      type="button"
+                      className="rs-title-link"
+                      style={{ fontSize: '13px' }}
+                      onClick={() => navigate('article-detail', { params: { articleId: art.id } })}
+                    >
+                      {art.title}
+                    </button>
+                    <div style={{ fontSize: '11.5px', color: 'var(--rs-text-muted)', marginTop: 2 }}>
+                      {art.feedName} · {formatDateTimeVi(art.publishedAt ?? art.fetchedAt)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      )}
     </div>
   );
 };

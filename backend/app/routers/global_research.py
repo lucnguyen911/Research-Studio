@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field
 from app.clients import youtube_client
 from app.core.config import SEARCH_MAX_RESULTS_PER_CALL
 from app.db.connection import run_db_sync
-from app.repositories import youtube_repo
-from app.services import discovery_service
+from app.repositories import rss_repo, settings_repo, youtube_repo
+from app.services import discovery_service, quota_service, scheduler_service
 
 router = APIRouter(prefix="/api/v1", tags=["global-research"])
 
@@ -101,3 +101,21 @@ async def update_manual_video_format(video_id: str, payload: ManualFormatRequest
 @router.get("/youtube/channels/{channel_id}")
 async def read_youtube_channel_detail(channel_id: str) -> dict[str, object]:
     return await run_db_sync(discovery_service.get_channel_detail, channel_id)
+
+
+@router.get("/global/overview")
+async def read_global_overview() -> dict[str, object]:
+    def _load() -> dict[str, object]:
+        summary = youtube_repo.get_global_overview_summary()
+        latest_articles = rss_repo.list_articles(limit=5)
+        quota = quota_service.get_quota_status()
+        settings = settings_repo.get_public_settings()
+        return {
+            **summary,
+            "latestRssArticles": latest_articles,
+            "quota": quota,
+            "settings": settings,
+            "scheduler": scheduler_service.scheduler.get_status(),
+        }
+
+    return await run_db_sync(_load)

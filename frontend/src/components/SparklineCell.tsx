@@ -79,7 +79,7 @@ export const SparklineCell: React.FC<SparklineCellProps> = ({
       <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>{badgeLabel}</div>
 
       <div className="rs-spark-tooltip" role="tooltip">
-        <div style={{ fontWeight: 700, marginBottom: 4 }}>{tooltipTitle} (DEMO)</div>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>{tooltipTitle}</div>
         <div style={{ color: 'var(--rs-text-secondary)', marginBottom: 6 }}>{tooltipDetail}</div>
         {coords.map((c, idx) => (
           <div

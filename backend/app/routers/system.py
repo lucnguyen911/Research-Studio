@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.db.connection import run_db_sync
 from app.repositories import settings_repo
-from app.services import quota_service, retention_service
+from app.services import quota_service, retention_service, scheduler_service
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
@@ -66,3 +66,8 @@ async def read_quota_status() -> dict[str, object]:
 @router.post("/purge-youtube-cache")
 async def purge_youtube_cache() -> dict[str, object]:
     return await run_db_sync(retention_service.purge_all_youtube_api_data_by_user_request)
+
+
+@router.get("/scheduler-status")
+async def read_scheduler_status() -> dict[str, object]:
+    return scheduler_service.scheduler.get_status()
