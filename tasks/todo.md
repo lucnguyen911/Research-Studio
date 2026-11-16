@@ -8,7 +8,7 @@
 
 ## Milestone 1 — Core Foundation
 
-### [ ] T01 — Cấu hình Runtime, Logging Che Khóa, Chuẩn hóa Lỗi & Chống Localhost CSRF/Origin
+### [x] T01 — Cấu hình Runtime, Logging Che Khóa, Chuẩn hóa Lỗi & Chống Localhost CSRF/Origin
 - **ID:** T01
 - **TITLE:** Cấu hình Runtime, Logging Che Khóa (`Log Redaction`), Chuẩn hóa Lỗi & Chống Localhost CSRF/Origin
 - **GOAL:** Thiết lập nền tảng cấu hình thư mục dữ liệu Windows (`RESEARCH_STUDIO_DATA_DIR` / `%LOCALAPPDATA%\ResearchStudio\`), bộ lọc log tự động che bí mật, tầng JSON lỗi thống nhất và hàng rào bảo vệ chống Localhost Drive-By CSRF (`X-Research-Studio-Client` + kiểm tra `Origin`), cùng cài đặt 3 gói Python tối thiểu (`tzdata`, `httpx`, `defusedxml`) khi bắt đầu Phase 7.
@@ -33,7 +33,7 @@
 - **RISK:** LOW
 - **USER APPROVAL REQUIRED:** NO *(Phụ thuộc việc User đã duyệt `GATE C` cho `tzdata`, `httpx`, `defusedxml`; chỉ cài khi vào Phase 7).*
 
-### [ ] T02 — Nền tảng SQLite (`WAL` + `BEGIN IMMEDIATE` + `to_thread`), Migration Backup & Schema 3 Tầng Nullable Tombstone
+### [x] T02 — Nền tảng SQLite (`WAL` + `BEGIN IMMEDIATE` + `to_thread`), Migration Backup & Schema 3 Tầng Nullable Tombstone
 - **ID:** T02
 - **TITLE:** Nền tảng SQLite (`WAL` + `BEGIN IMMEDIATE` + `to_thread`), Migration Backup & Schema 3 Tầng Nullable Tombstone
 - **GOAL:** Xây dựng helper kết nối SQLite an toàn đồng thời cho Python 3.11 (`connection-per-operation` đóng trong `finally`, `WAL`, `NORMAL`, `foreign_keys = ON`, `busy_timeout = 5000`, `isolation_level = None` + `BEGIN IMMEDIATE`, helper `anyio.to_thread.run_sync`), trình migration forward-only bắt buộc `Connection.backup()` (giới hạn 3 bản `.db`), và schema 3 tầng có toàn bộ cột `YouTube API Data` cho phép `NULL` kèm `ON DELETE RESTRICT` trên liên kết `video_id`/`channel_id`.
@@ -54,7 +54,7 @@
 - **RISK:** HIGH
 - **USER APPROVAL REQUIRED:** NO
 
-### [ ] T03 — Bảo vệ YouTube API Key bằng Windows DPAPI (`LocalFree` + Phục hồi Lỗi Giải mã), Cài đặt Hệ thống & Pháp lý
+### [x] T03 — Bảo vệ YouTube API Key bằng Windows DPAPI (`LocalFree` + Phục hồi Lỗi Giải mã), Cài đặt Hệ thống & Pháp lý
 - **ID:** T03
 - **TITLE:** Bảo vệ YouTube API Key bằng Windows DPAPI (`LocalFree` + Phục hồi Lỗi Giải mã), Cài đặt Hệ thống & Pháp lý
 - **GOAL:** Hoàn thiện mã hóa/giải mã API Key bằng Windows DPAPI (`CryptProtectData`/`CryptUnprotectData` kèm giải phóng `kernel32.LocalFree` trong `finally` và xử lý blob hỏng/chuyển máy trả `api_key_status = "unreadable"`), repository đọc/ghi cài đặt hệ thống + ngưỡng quota 2 bucket + trạng thái chấp thuận Chính sách Quyền riêng tư YouTube, và router `/api/v1/system` gọi trực tiếp `settings_repo.py` (không thêm service pass-through thừa).
@@ -76,7 +76,7 @@
 - **RISK:** HIGH
 - **USER APPROVAL REQUIRED:** NO
 
-### [ ] T04 — Backend API Quản lý Project, Xuất JSON Tên File An toàn & Xóa Project Kèm Snapshot Khôi phục
+### [x] T04 — Backend API Quản lý Project, Xuất JSON Tên File An toàn & Xóa Project Kèm Snapshot Khôi phục
 - **ID:** T04
 - **TITLE:** Backend API Quản lý Project, Xuất JSON Tên File An toàn & Xóa Project Kèm Snapshot Khôi phục
 - **GOAL:** Xây dựng `project_repo.py` và router `/api/v1/projects` (CRUD Project với `{project_id}` tường minh trên URL, không biến toàn cục ngầm; tải xuống 1 file JSON đơn giản chứa dữ liệu riêng của Project với tên file slug an toàn chống Windows device name & Path Traversal, tuyệt đối không kèm API Key; xóa Project bắt buộc khớp tên xác nhận, tự động lưu Project Recovery JSON chỉ gồm dữ liệu người dùng vào `backups/` và bảo toàn 100% thực thể dùng chung).
@@ -96,8 +96,8 @@
 - **USER APPROVAL REQUIRED:** NO
 
 ### Checkpoint M1 — Core Foundation
-- [ ] Toàn bộ test `T01`–`T04` pass 100% (`0` skipped), `pip check` `0` xung đột.
-- [ ] Swagger UI `http://127.0.0.1:8000/api/docs` chạy thật: lưu & che API Key DPAPI, tạo/export/xóa Project có backup bảo toàn thực thể dùng chung.
+- [x] Toàn bộ test `T01`–`T04` pass 100% (`0` skipped), `pip check` `0` xung đột.
+- [x] Swagger UI `http://127.0.0.1:8000/api/docs` chạy thật: lưu & che API Key DPAPI, tạo/export/xóa Project có backup bảo toàn thực thể dùng chung.
 
 ---
 
