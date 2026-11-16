@@ -391,31 +391,68 @@ export function useScrollContainerSync(
     if (!contentReady) return undefined;
     const el = scrollRef.current;
     if (!el) return undefined;
+    if (targetScrollTop <= 0) {
+      el.scrollTop = 0;
+      isRestoringRef.current = false;
+      return undefined;
+    }
+
     isRestoringRef.current = true;
     let cancelled = false;
     let rafId = 0;
-    let attempts = 0;
+    const deadline = performance.now() + 1500;
 
-    const applyTarget = () => {
-      if (cancelled) return;
-      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
-      if (targetScrollTop > 0 && maxScroll < targetScrollTop && attempts < 14) {
-        attempts += 1;
-        rafId = window.requestAnimationFrame(applyTarget);
-        return;
-      }
-      el.scrollTop = targetScrollTop;
-      rafId = window.requestAnimationFrame(() => {
-        if (!cancelled) {
-          isRestoringRef.current = false;
-        }
-      });
+    const cancelOnUserInput = () => {
+      cancelled = true;
+      window.cancelAnimationFrame(rafId);
+      isRestoringRef.current = false;
+      observer.disconnect();
     };
 
-    rafId = window.requestAnimationFrame(applyTarget);
+    const tryApplyTarget = () => {
+      if (cancelled) return;
+      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+      if (maxScroll >= targetScrollTop) {
+        el.scrollTop = targetScrollTop;
+        rafId = window.requestAnimationFrame(() => {
+          if (!cancelled) {
+            isRestoringRef.current = false;
+          }
+        });
+        observer.disconnect();
+        return;
+      }
+      if (performance.now() >= deadline) {
+        el.scrollTop = maxScroll;
+        isRestoringRef.current = false;
+        observer.disconnect();
+        return;
+      }
+      rafId = window.requestAnimationFrame(tryApplyTarget);
+    };
+
+    const observer = new MutationObserver(() => {
+      if (!cancelled) {
+        window.cancelAnimationFrame(rafId);
+        rafId = window.requestAnimationFrame(tryApplyTarget);
+      }
+    });
+    observer.observe(el, { childList: true, subtree: true });
+
+    el.addEventListener('wheel', cancelOnUserInput, { passive: true, once: true });
+    el.addEventListener('pointerdown', cancelOnUserInput, { passive: true, once: true });
+    el.addEventListener('touchmove', cancelOnUserInput, { passive: true, once: true });
+    el.addEventListener('keydown', cancelOnUserInput, { passive: true, once: true });
+
+    rafId = window.requestAnimationFrame(tryApplyTarget);
     return () => {
       cancelled = true;
       window.cancelAnimationFrame(rafId);
+      observer.disconnect();
+      el.removeEventListener('wheel', cancelOnUserInput);
+      el.removeEventListener('pointerdown', cancelOnUserInput);
+      el.removeEventListener('touchmove', cancelOnUserInput);
+      el.removeEventListener('keydown', cancelOnUserInput);
       isRestoringRef.current = false;
     };
   }, [entryId, scrollRef, targetScrollTop, contentReady]);

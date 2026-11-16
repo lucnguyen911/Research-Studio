@@ -239,6 +239,7 @@ async def run_free_search(
     published_after: str | None = None,
     order_by: str = "relevance",
     max_results: int = SEARCH_MAX_RESULTS_PER_CALL,
+    page_token: str | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
     retry_backoff_sec: float = 0.15,
     now_utc: datetime | None = None,
@@ -256,7 +257,7 @@ async def run_free_search(
     clean_lang = relevance_language.strip().lower()[:16] or "vi"
     clean_order = order_by if order_by in ("relevance", "date", "viewCount", "rating") else "relevance"
 
-    found_ids = await youtube_client.search_youtube(
+    found_ids, next_page_token = await youtube_client.search_youtube_page(
         query=clean_query,
         object_type=clean_type,
         region_code=clean_region,
@@ -264,6 +265,7 @@ async def run_free_search(
         published_after=published_after,
         order_by=clean_order,
         max_results=max_results,
+        page_token=page_token,
         transport=transport,
     )
 
@@ -364,6 +366,7 @@ async def run_free_search(
             },
             "videos": [videos_map[vid] for vid in ordered_video_ids if vid in videos_map],
             "channels": [channels_map[cid] for cid in ordered_channel_ids if cid in channels_map],
+            "nextPageToken": next_page_token,
             "quota": quota_service.get_quota_status(now_utc=utc_now),
         }
 

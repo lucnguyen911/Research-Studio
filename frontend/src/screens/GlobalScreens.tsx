@@ -21,8 +21,9 @@ import type {
   SearchSessionDto,
   TrendsResponseDto,
   YoutubeCategoryDto,
+  YoutubeChannelDto,
 } from '../api/types';
-import { IDEA_STATUS_LABELS } from '../prototype/demoData';
+import { IDEA_STATUS_LABELS, formatInt } from '../prototype/demoData';
 import type { IdeaSourceType, VideoItem } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
 import { usePrototypeWorkspace } from '../state/workspaceContext';
@@ -593,12 +594,15 @@ export const FreeResearchScreen: React.FC = () => {
     quotaStatus,
     projects,
     addKeyword,
+    addChannelToProject,
     registerVideosInMemory,
     syncQuotaStatus,
     pushToast,
   } = usePrototypeWorkspace();
 
   const [queryInput, setQueryInput] = useState('');
+  const [objectType, setObjectType] = useState<'video' | 'channel'>('video');
+  const [publishedWindow, setPublishedWindow] = useState<'any' | '24h' | '7d' | '30d'>('any');
   const [regionCode, setRegionCode] = useState(systemSettings.defaultRegionCode || 'VN');
   const [relevanceLanguage, setRelevanceLanguage] = useState(systemSettings.defaultRelevanceLanguage || 'vi');
   const [orderBy, setOrderBy] = useState<'relevance' | 'date' | 'viewCount' | 'rating'>('relevance');
@@ -606,11 +610,20 @@ export const FreeResearchScreen: React.FC = () => {
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [activeSession, setActiveSession] = useState<SearchSessionDto | null>(null);
   const [resultVideos, setResultVideos] = useState<VideoItem[]>([]);
+  const [resultChannels, setResultChannels] = useState<YoutubeChannelDto[]>([]);
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loadingSession, setLoadingSession] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const activeProject = projects.find((p) => p.id === currentEntry.projectId) ?? projects[0] ?? null;
+
+  const computePublishedAfter = (win: 'any' | '24h' | '7d' | '30d'): string | null => {
+    if (win === 'any') return null;
+    const days = win === '24h' ? 1 : win === '7d' ? 7 : 30;
+    return new Date(Date.now() - days * 86_400_000).toISOString();
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -636,14 +649,17 @@ export const FreeResearchScreen: React.FC = () => {
     const controller = new AbortController();
     abortRef.current = controller;
     setLoadingSession(true);
+    setNextPageToken(null);
     void fetchSearchSessionDetailApi(sessionId, controller.signal)
       .then((detail) => {
         if (controller.signal.aborted) return;
         const mapped = detail.videos.map(mapYoutubeVideoDtoToItem);
         registerVideosInMemory(mapped);
         setActiveSession(detail.session);
+        setObjectType(detail.session.objectType);
         setQueryInput(detail.session.query);
         setResultVideos(mapped);
+        setResultChannels(detail.channels ?? []);
         pushToast('success', `Đã mở lại phiên "${detail.session.query}" từ SQLite (0 quota YouTube).`);
       })
       .catch((err) => {
@@ -664,12 +680,15 @@ export const FreeResearchScreen: React.FC = () => {
     const controller = new AbortController();
     abortRef.current = controller;
     setSearching(true);
+    setNextPageToken(null);
+    const publishedAfter = computePublishedAfter(publishedWindow);
     void runFreeSearchApi(
       {
         query: queryInput.trim(),
-        objectType: 'video',
+        objectType,
         regionCode,
         relevanceLanguage,
+        publishedAfter,
         orderBy,
         maxResults: 25,
       },
@@ -681,11 +700,15 @@ export const FreeResearchScreen: React.FC = () => {
         registerVideosInMemory(mapped);
         setActiveSession(res.session);
         setResultVideos(mapped);
+        setResultChannels(res.channels ?? []);
+        setNextPageToken(res.nextPageToken ?? null);
         setSessions((prev) => [res.session, ...prev.filter((s) => s.id !== res.session.id)]);
         void syncQuotaStatus();
+        const count = res.session.objectType === 'channel' ? (res.channels?.length ?? 0) : mapped.length;
+        const unitLabel = res.session.objectType === 'channel' ? 'kênh' : 'video';
         pushToast(
           'success',
-          `Đã tìm "${res.session.query}" (${mapped.length} video) — 1 lượt Search Queries + General Data API.`,
+          `Đã tìm "${res.session.query}" (${count} ${unitLabel}) — 1 lượt Search Queries + General Data API.`,
         );
       })
       .catch((err) => {
@@ -702,14 +725,72 @@ export const FreeResearchScreen: React.FC = () => {
       });
   };
 
-  const searchBlocked =
-    !queryInput.trim() ||
+  const handleLoadNextPage = () => {
+    if (!activeSession || !nextPageToken) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLoadingMore(true);
+    const sessionOrder =
+      activeSession.orderBy === 'date' || activeSession.orderBy === 'viewCount' || activeSession.orderBy === 'rating'
+        ? activeSession.orderBy
+        : 'relevance';
+    void runFreeSearchApi(
+      {
+        query: activeSession.query,
+        objectType: activeSession.objectType,
+        regionCode: activeSession.regionCode,
+        relevanceLanguage: activeSession.relevanceLanguage,
+        publishedAfter: activeSession.publishedAfter,
+        orderBy: sessionOrder,
+        maxResults: 25,
+        pageToken: nextPageToken,
+      },
+      controller.signal,
+    )
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        const mapped = res.videos.map(mapYoutubeVideoDtoToItem);
+        registerVideosInMemory(mapped);
+        if (res.session.objectType === 'channel') {
+          setResultChannels((prev) => {
+            const seen = new Set(prev.map((c) => c.channelId));
+            return [...prev, ...(res.channels ?? []).filter((c) => !seen.has(c.channelId))];
+          });
+        } else {
+          setResultVideos((prev) => {
+            const seen = new Set(prev.map((v) => v.id));
+            return [...prev, ...mapped.filter((v) => !seen.has(v.id))];
+          });
+        }
+        setActiveSession(res.session);
+        setNextPageToken(res.nextPageToken ?? null);
+        setSessions((prev) => [res.session, ...prev.filter((s) => s.id !== res.session.id)]);
+        void syncQuotaStatus();
+        const addedCount = res.session.objectType === 'channel' ? (res.channels?.length ?? 0) : mapped.length;
+        pushToast('success', `Đã tải thêm ${addedCount} kết quả từ trang kế tiếp (1 Search + 1 General API).`);
+      })
+      .catch((err) => {
+        if (!isAbortError(err)) {
+          pushToast('error', err instanceof ApiClientError ? err.message : 'Tải trang kế tiếp thất bại.');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoadingMore(false);
+        }
+      });
+  };
+
+  const quotaOrConnectionBlocked =
     !backendOnline ||
     !systemSettings.legalConsentAccepted ||
     systemSettings.apiKeyStatus !== 'configured' ||
     quotaStatus.searchQueries.exhausted ||
-    quotaStatus.generalData.exhausted ||
-    searching;
+    quotaStatus.generalData.exhausted;
+
+  const searchBlocked = !queryInput.trim() || quotaOrConnectionBlocked || searching || loadingMore;
+  const displayObjectType = activeSession?.objectType ?? objectType;
 
   return (
     <div className="rs-container">
@@ -720,7 +801,7 @@ export const FreeResearchScreen: React.FC = () => {
             <span className="rs-badge">Chi phí tìm mới: 1 lượt Search Queries + 1 unit General Data API</span>
           </div>
           <p className="rs-page-subtitle">
-            Chỉ gọi YouTube API khi bạn bấm Tìm (0 auto-retry trên search.list); mở lại phiên cũ còn hạn &lt;= 30 ngày tốn 0 quota
+            Hỗ trợ tìm Video &amp; Kênh YouTube chỉ khi bạn bấm Tìm (0 auto-retry trên search.list); mở lại phiên cũ &lt;= 30 ngày tốn 0 quota
           </p>
         </div>
       </div>
@@ -732,11 +813,36 @@ export const FreeResearchScreen: React.FC = () => {
           type="text"
           aria-label="Nhập từ khóa tìm kiếm YouTube"
           className="rs-input"
-          style={{ flex: '1 1 240px' }}
+          style={{ flex: '1 1 220px' }}
           placeholder="Nhập từ khóa muốn khảo sát trên YouTube..."
           value={queryInput}
           onChange={(e) => setQueryInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !searchBlocked) {
+              handleRunSearch();
+            }
+          }}
         />
+        <select
+          aria-label="Loại kết quả tìm kiếm"
+          className="rs-select rs-select-compact"
+          value={objectType}
+          onChange={(e) => setObjectType(e.target.value as 'video' | 'channel')}
+        >
+          <option value="video">Tìm Video</option>
+          <option value="channel">Tìm Kênh</option>
+        </select>
+        <select
+          aria-label="Khoảng thời gian đăng"
+          className="rs-select rs-select-compact"
+          value={publishedWindow}
+          onChange={(e) => setPublishedWindow(e.target.value as 'any' | '24h' | '7d' | '30d')}
+        >
+          <option value="any">Mọi thời điểm</option>
+          <option value="24h">24 giờ qua</option>
+          <option value="7d">7 ngày qua</option>
+          <option value="30d">30 ngày qua</option>
+        </select>
         <select
           aria-label="Quốc gia tìm kiếm"
           className="rs-select rs-select-compact"
@@ -767,13 +873,14 @@ export const FreeResearchScreen: React.FC = () => {
           <option value="viewCount">Nhiều lượt xem (viewCount)</option>
         </select>
 
-        {searching ? (
+        {searching || loadingMore ? (
           <button
             type="button"
             className="rs-btn rs-btn-danger"
             onClick={() => {
               abortRef.current?.abort();
               setSearching(false);
+              setLoadingMore(false);
             }}
           >
             Hủy (Cancel)
@@ -818,7 +925,7 @@ export const FreeResearchScreen: React.FC = () => {
               className={`rs-pill-tab ${activeSession?.id === sess.id ? 'is-active' : ''}`}
               onClick={() => openSavedSession(sess.id)}
             >
-              “{sess.query}” ({sess.regionCode}) · {sess.resultCount} kq
+              “{sess.query}” [{sess.objectType === 'channel' ? 'Kênh' : 'Video'} · {sess.regionCode}] · {sess.resultCount} kq
             </button>
           ))
         )}
@@ -826,6 +933,70 @@ export const FreeResearchScreen: React.FC = () => {
 
       {searching || loadingSession ? (
         <LoadingSkeletonCard label="Đang tải kết quả tìm kiếm..." />
+      ) : displayObjectType === 'channel' && resultChannels.length > 0 ? (
+        <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <h2 style={{ margin: 0, fontSize: '15.5px' }}>
+              Kết quả Kênh YouTube ({resultChannels.length})
+            </h2>
+            {nextPageToken && (
+              <button
+                type="button"
+                className="rs-btn rs-btn-secondary rs-btn-sm"
+                disabled={quotaOrConnectionBlocked || loadingMore}
+                onClick={handleLoadNextPage}
+              >
+                {loadingMore ? 'Đang tải trang kế tiếp...' : 'Tải trang kế tiếp (1 Search + 1 API)'}
+              </button>
+            )}
+          </div>
+          <div className="rs-grid-2">
+            {resultChannels.map((ch) => (
+              <div
+                key={ch.channelId}
+                className="rs-card-subtle"
+                style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div>
+                    <strong style={{ fontSize: '14.5px' }}>{ch.title || ch.channelId}</strong>
+                    <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
+                      {ch.handle || ch.channelId} {ch.country ? `· ${ch.country}` : ''}
+                    </div>
+                  </div>
+                  <span className="rs-badge rs-tabular">
+                    {formatInt(ch.subscriberCount)} sub · {formatInt(ch.videoCount)} video
+                  </span>
+                </div>
+                {ch.description && (
+                  <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--rs-text-secondary)' }}>
+                    {ch.description.length > 160 ? `${ch.description.slice(0, 159)}…` : ch.description}
+                  </p>
+                )}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="rs-btn rs-btn-secondary rs-btn-sm"
+                    onClick={() => navigate('channel-detail', { params: { channelId: ch.channelId } })}
+                  >
+                    Chi tiết kênh
+                  </button>
+                  {activeProject && (
+                    <button
+                      type="button"
+                      className="rs-btn rs-btn-primary rs-btn-sm"
+                      onClick={() => {
+                        void addChannelToProject(activeProject.id, ch.channelId);
+                      }}
+                    >
+                      + Đối thủ vào {activeProject.name}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       ) : (
         <>
           <VideoResearchTable
@@ -838,6 +1009,18 @@ export const FreeResearchScreen: React.FC = () => {
                 : 'Nhập từ khóa và bấm "Tìm trên YouTube" (tiêu tốn 1 lượt Search Queries) hoặc mở lại phiên đã lưu (0 quota).'
             }
           />
+          {nextPageToken && (
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <button
+                type="button"
+                className="rs-btn rs-btn-secondary"
+                disabled={quotaOrConnectionBlocked || loadingMore}
+                onClick={handleLoadNextPage}
+              >
+                {loadingMore ? 'Đang tải trang kế tiếp...' : 'Tải trang kế tiếp (1 Search + 1 API)'}
+              </button>
+            </div>
+          )}
           {resultVideos.length === 0 && systemSettings.apiKeyStatus !== 'configured' && (
             <div>
               <button type="button" className="rs-btn rs-btn-secondary" onClick={() => navigate('system-settings')}>

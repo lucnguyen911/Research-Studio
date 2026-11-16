@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ScreenId, VideoItem, ViewFilterState } from '../prototype/types';
-import { formatInt } from '../prototype/demoData';
+import { formatInt, formatSnapshotDeltaLabel } from '../prototype/demoData';
 import { useAppNavigation } from '../state/navigationStore';
 import { usePrototypeWorkspace } from '../state/workspaceContext';
 import { FormatBadgeGroup } from './FormatBadgeGroup';
@@ -302,10 +302,6 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                 const breakoutState = projectIdForBreakout ? breakoutByProject[projectIdForBreakout]?.[v.id] : undefined;
                 const snapshotPoints =
                   uiMode === 'insufficient_data' ? v.snapshots30d.slice(-1) : v.snapshots30d;
-                const deltaRaw =
-                  snapshotPoints.length >= 2
-                    ? snapshotPoints[snapshotPoints.length - 1].viewCount - snapshotPoints[0].viewCount
-                    : 0;
 
                 return (
                   <tr key={v.id}>
@@ -380,7 +376,7 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                           points={snapshotPoints.map((s) => s.viewCount)}
                           labels={snapshotPoints.map((s) => s.capturedAt)}
                           badgeLabel={`${snapshotPoints.length} mốc thu thập`}
-                          directionLabel={snapshotPoints.length >= 2 ? `↗ +${formatInt(deltaRaw)}` : '1 mốc'}
+                          directionLabel={formatSnapshotDeltaLabel(snapshotPoints)}
                           tooltipTitle="Mốc viewCount thô <= 30 ngày"
                           tooltipDetail="Chỉ trình bày số liệu gốc theo timestamp (III.E.4.f), không tính Views/ngày hay tỷ lệ."
                           insufficientText="Chưa đủ mốc (1 lần lấy)"

@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatDateTimeVi } from '../api/mappers';
 import type { ScreenId } from '../prototype/types';
 import { STAGE_TWO_INFO } from '../prototype/demoData';
 import { useAppNavigation } from '../state/navigationStore';
@@ -135,6 +136,39 @@ export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
             <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => navigate('system-settings')}>
               Mở Cài đặt API Key
             </button>
+          </div>
+        )}
+
+      {requiresYouTubeApi &&
+        backendOnline &&
+        quotaStatus.searchQueries.warning &&
+        !quotaStatus.searchQueries.exhausted && (
+          <div className="rs-banner rs-banner-warn" role="status">
+            <div>
+              <strong>
+                Cảnh báo sắp chạm ngưỡng Search Queries ({quotaStatus.searchQueries.used}/
+                {quotaStatus.searchQueries.limit} lượt/ngày):
+              </strong>{' '}
+              Ước tính từ sổ kế toán quota cục bộ; còn {quotaStatus.searchQueries.remaining} lượt tìm mới trước mốc
+              reset 00:00 PT ({formatDateTimeVi(quotaStatus.resetAtUtc)}).
+            </div>
+          </div>
+        )}
+
+      {requiresYouTubeApi &&
+        backendOnline &&
+        quotaStatus.generalData.warning &&
+        !quotaStatus.generalData.exhausted && (
+          <div className="rs-banner rs-banner-warn" role="status">
+            <div>
+              <strong>
+                Cảnh báo sắp chạm ngưỡng General Data API (
+                {quotaStatus.generalData.used.toLocaleString('vi-VN')}/
+                {quotaStatus.generalData.limit.toLocaleString('vi-VN')} units/ngày):
+              </strong>{' '}
+              Ước tính từ sổ kế toán quota cục bộ; hãy ưu tiên dùng dữ liệu đã lưu đệm hoặc đợi reset lúc{' '}
+              {formatDateTimeVi(quotaStatus.resetAtUtc)}.
+            </div>
           </div>
         )}
 

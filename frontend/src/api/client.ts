@@ -77,13 +77,6 @@ function buildHeaders(method: string, extra?: HeadersInit): Headers {
 }
 
 async function parseErrorResponse(response: Response): Promise<ApiClientError> {
-  if (response.status === 502 || response.status === 504) {
-    return new ApiClientError(
-      'NETWORK_UNREACHABLE',
-      'Không kết nối được tới dịch vụ Backend cục bộ (127.0.0.1:8000).',
-      response.status,
-    );
-  }
   try {
     const data = (await response.json()) as Partial<ApiErrorEnvelope>;
     if (data && data.error && typeof data.error.message === 'string') {
@@ -95,7 +88,14 @@ async function parseErrorResponse(response: Response): Promise<ApiClientError> {
       );
     }
   } catch {
-    // Non-JSON error body
+    // Non-JSON error body (e.g. Vite proxy error when local backend is stopped)
+  }
+  if (response.status === 502 || response.status === 504) {
+    return new ApiClientError(
+      'NETWORK_UNREACHABLE',
+      'Không kết nối được tới dịch vụ Backend cục bộ (127.0.0.1:8000).',
+      response.status,
+    );
   }
   return new ApiClientError(
     `HTTP_${response.status}`,
@@ -364,6 +364,7 @@ export async function runFreeSearchApi(
     publishedAfter?: string | null;
     orderBy: 'relevance' | 'date' | 'viewCount' | 'rating';
     maxResults?: number;
+    pageToken?: string | null;
   },
   signal?: AbortSignal,
 ): Promise<FreeSearchResponseDto> {

@@ -14,6 +14,8 @@ import xml.etree.ElementTree as stdlib_ET
 
 from defusedxml import ElementTree as DefusedET
 from defusedxml.common import DefusedXmlException
+import anyio
+import httpcore
 import httpx
 
 from app.core.config import (
@@ -300,6 +302,114 @@ def parse_feed_xml(raw_bytes: bytes) -> list[dict[str, Any]]:
     return articles
 
 
+class _SafePublicNetworkBackend(httpcore.AsyncNetworkBackend):
+    """Resolve hostname once per TCP connection, enforce global-IP validation, and connect by pinned IP."""
+
+    def __init__(self, *, resolver: DnsResolver | None = None) -> None:
+        self._inner = httpcore.AnyIOBackend()
+        self._resolver = resolver or _default_dns_resolver
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: Any = None,
+    ) -> httpcore.AsyncNetworkStream:
+        clean_host = host.strip("[]")
+        lowered = clean_host.lower()
+        if (
+            lowered == "localhost"
+            or lowered.endswith(".localhost")
+            or lowered.endswith(".local")
+            or lowered.endswith(".internal")
+            or lowered.endswith(".arpa")
+        ):
+            raise AppError(
+                code="RSS_SSRF_BLOCKED",
+                message="Bị chặn vì lý do bảo mật SSRF: không cho phép truy cập localhost hoặc tên miền nội bộ.",
+                status_code=400,
+            )
+
+        try:
+            ipaddress.ip_address(clean_host)
+        except ValueError:
+            try:
+                addr_infos = await anyio.to_thread.run_sync(lambda: self._resolver(clean_host, port))
+            except OSError as exc:
+                raise AppError(
+                    code="RSS_DNS_FAILED",
+                    message=f"Không phân giải được tên miền nguồn RSS ({clean_host}).",
+                    status_code=400,
+                ) from exc
+            if not addr_infos:
+                raise AppError("RSS_DNS_FAILED", f"Tên miền {clean_host} không trả về địa chỉ IP nào.", status_code=400)
+
+            validated_ips: list[str] = []
+            seen: set[str] = set()
+            for info in addr_infos:
+                sockaddr = info[4]
+                if isinstance(sockaddr, tuple) and sockaddr:
+                    ip_str = str(sockaddr[0]).split("%")[0].strip()
+                    _ensure_ip_globally_routable(ip_str)
+                    if ip_str not in seen:
+                        seen.add(ip_str)
+                        validated_ips.append(ip_str)
+            if not validated_ips:
+                raise AppError("RSS_DNS_FAILED", f"Tên miền {clean_host} không trả về địa chỉ IP hợp lệ.", status_code=400)
+
+            last_connect_err: httpcore.ConnectError | None = None
+            for target_ip in validated_ips:
+                try:
+                    return await self._inner.connect_tcp(
+                        target_ip,
+                        port,
+                        timeout=timeout,
+                        local_address=local_address,
+                        socket_options=socket_options,
+                    )
+                except httpcore.ConnectError as exc:
+                    last_connect_err = exc
+            assert last_connect_err is not None
+            raise last_connect_err
+
+        _ensure_ip_globally_routable(clean_host)
+        return await self._inner.connect_tcp(
+            clean_host,
+            port,
+            timeout=timeout,
+            local_address=local_address,
+            socket_options=socket_options,
+        )
+
+    async def connect_unix_socket(
+        self,
+        path: str,
+        timeout: float | None = None,
+        socket_options: Any = None,
+    ) -> httpcore.AsyncNetworkStream:
+        raise AppError("RSS_SSRF_BLOCKED", "Không cho phép kết nối UNIX socket từ nguồn RSS.", status_code=400)
+
+    async def sleep(self, seconds: float) -> None:
+        await self._inner.sleep(seconds)
+
+
+class _PinnedPublicHTTPTransport(httpx.AsyncHTTPTransport):
+    """HTTP transport pinning outbound connections to DNS-validated public IPs against TOCTOU rebinding."""
+
+    def __init__(self, *, resolver: DnsResolver | None = None) -> None:
+        super().__init__(verify=True, trust_env=False, retries=0)
+        ssl_context = httpx.create_ssl_context(verify=True, trust_env=False)
+        self._pool = httpcore.AsyncConnectionPool(
+            ssl_context=ssl_context,
+            max_connections=10,
+            max_keepalive_connections=5,
+            retries=0,
+            network_backend=_SafePublicNetworkBackend(resolver=resolver),
+        )
+
+
 async def fetch_and_parse_feed(
     url: str,
     *,
@@ -309,13 +419,22 @@ async def fetch_and_parse_feed(
     """
     Fetch an RSS/Atom feed safely:
     - Re-validates DNS/IP on the initial URL and EVERY HTTP redirect hop (<= 3 hops).
+    - Pins TCP connections via _SafePublicNetworkBackend to defend against DNS rebinding TOCTOU.
     - Aborts streaming payloads larger than 5 MB.
     - Parses via defusedxml and strips unsafe HTML subtrees via HTMLParser.
     """
     current_url = validate_public_feed_url(url, resolver=resolver)
     timeout = httpx.Timeout(timeout=HTTP_READ_TIMEOUT_SEC, connect=HTTP_CONNECT_TIMEOUT_SEC)
+    active_transport: httpx.AsyncBaseTransport = (
+        transport if transport is not None else _PinnedPublicHTTPTransport(resolver=resolver)
+    )
 
-    async with httpx.AsyncClient(timeout=timeout, transport=transport, follow_redirects=False) as client:
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        transport=active_transport,
+        follow_redirects=False,
+        trust_env=False,
+    ) as client:
         for hop in range(MAX_RSS_REDIRECT_HOPS + 1):
             try:
                 async with client.stream(

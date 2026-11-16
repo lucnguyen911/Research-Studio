@@ -27,6 +27,7 @@ _FATAL_YOUTUBE_CODES = frozenset(
     {
         "YOUTUBE_API_KEY_MISSING",
         "YOUTUBE_API_KEY_INVALID",
+        "YOUTUBE_API_KEY_UNREADABLE",
         "LEGAL_CONSENT_REQUIRED",
         "QUOTA_GENERAL_EXHAUSTED",
         "AUTO_REFRESH_QUOTA_CAP_REACHED",
@@ -376,8 +377,18 @@ async def refresh_project_competitors(
             ok_count += 1
             results.append({"channelId": cid, "status": "ok", "videosFetched": bundle["videosFetched"]})
         except AppError as exc:
-            if exc.code in _FATAL_YOUTUBE_CODES and len(targets) == 1:
-                raise
+            if exc.code in _FATAL_YOUTUBE_CODES:
+                if ok_count == 0:
+                    raise
+                results.append(
+                    {
+                        "channelId": cid,
+                        "status": "skipped_fatal",
+                        "errorCode": exc.code,
+                        "errorMessage": exc.message,
+                    }
+                )
+                break
             error_count += 1
             await run_db_sync(
                 _mark_project_channel_error,
@@ -392,12 +403,6 @@ async def refresh_project_competitors(
                     "errorMessage": exc.message,
                 }
             )
-            if exc.code in _FATAL_YOUTUBE_CODES:
-                break
-
-    if targets and ok_count == 0 and error_count == 1 and results and results[0].get("errorCode") in _FATAL_YOUTUBE_CODES:
-        err_item = results[0]
-        raise AppError(str(err_item["errorCode"]), str(err_item["errorMessage"]), status_code=400)
 
     listing = await run_db_sync(list_project_competitors, project_id, now_utc=utc_now)
     return {

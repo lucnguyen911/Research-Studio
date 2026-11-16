@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import sqlite3
 from typing import Any, Literal
+import uuid
 
 from app.core.config import YOUTUBE_API_CACHE_TTL_DAYS
 from app.core.errors import AppError
@@ -544,7 +545,7 @@ def upsert_project_video_breakout(
                 INSERT INTO project_videos (id, project_id, video_id, is_user_breakout, notes, marked_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (f"pv-{project_id[:6]}-{video_id[:16]}", project_id, video_id, 1 if flagged else 0, clean_notes, marked_at),
+                (f"pv-{uuid.uuid4().hex[:12]}", project_id, video_id, 1 if flagged else 0, clean_notes, marked_at),
             )
         else:
             flagged = bool(existing["is_user_breakout"]) if is_user_breakout is None else bool(is_user_breakout)

@@ -48,6 +48,13 @@ class LogRedactionFilter(logging.Filter):
         return True
 
 
+class RedactingFormatter(logging.Formatter):
+    """Formatter that scrubs secrets from both rendered messages and exception tracebacks."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return redact_sensitive_text(super().format(record))
+
+
 def close_logging_handlers() -> None:
     """Flush and close all handlers attached to the application logger cleanly."""
     logger = logging.getLogger(LOGGER_NAME)
@@ -68,7 +75,7 @@ def configure_logging(data_dir: Path | None = None) -> logging.Logger:
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
-    formatter = logging.Formatter(
+    formatter = RedactingFormatter(
         fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%SZ",
     )

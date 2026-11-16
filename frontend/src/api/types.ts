@@ -199,6 +199,7 @@ export interface SearchSessionDetailDto {
 }
 
 export interface FreeSearchResponseDto extends SearchSessionDetailDto {
+  nextPageToken?: string | null;
   quota: QuotaStatusDto;
 }
 

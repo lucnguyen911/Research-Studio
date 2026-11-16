@@ -306,6 +306,7 @@ class LifespanScheduler:
                             "QUOTA_GENERAL_EXHAUSTED",
                             "YOUTUBE_API_KEY_INVALID",
                             "YOUTUBE_API_KEY_MISSING",
+                            "YOUTUBE_API_KEY_UNREADABLE",
                             "LEGAL_CONSENT_REQUIRED",
                         ):
                             youtube_skipped_reason = exc.code

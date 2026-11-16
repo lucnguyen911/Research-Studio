@@ -28,6 +28,7 @@ class FreeSearchRequest(BaseModel):
     publishedAfter: str | None = None
     orderBy: Literal["relevance", "date", "viewCount", "rating"] = "relevance"
     maxResults: int = Field(default=SEARCH_MAX_RESULTS_PER_CALL, ge=1, le=50)
+    pageToken: str | None = Field(default=None, max_length=128)
 
 
 class ManualFormatRequest(BaseModel):
@@ -85,6 +86,7 @@ async def execute_free_search(payload: FreeSearchRequest) -> dict[str, object]:
         published_after=payload.publishedAfter,
         order_by=payload.orderBy,
         max_results=payload.maxResults,
+        page_token=payload.pageToken,
     )
 
 

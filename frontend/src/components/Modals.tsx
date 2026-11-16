@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { formatInt } from '../prototype/demoData';
+import { formatInt, formatSnapshotDeltaLabel } from '../prototype/demoData';
 import type { IdeaPriority, ProjectItem } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
 import { usePrototypeWorkspace, type SaveIdeaDraft } from '../state/workspaceContext';
@@ -455,11 +455,7 @@ export const VideoInspectorDrawer: React.FC = () => {
           points={video.snapshots30d.map((s) => s.viewCount)}
           labels={video.snapshots30d.map((s) => s.capturedAt)}
           badgeLabel="Mốc viewCount thô <= 30 ngày"
-          directionLabel={
-            video.snapshots30d.length >= 2
-              ? `+${formatInt(video.snapshots30d[video.snapshots30d.length - 1].viewCount - video.snapshots30d[0].viewCount)}`
-              : '1 mốc'
-          }
+          directionLabel={formatSnapshotDeltaLabel(video.snapshots30d)}
           tooltipTitle="Chuỗi mốc thô SQLite"
           tooltipDetail="Hiển thị nguyên bản số liệu các lần thu thập <= 30 ngày, không tính tỷ lệ."
         />

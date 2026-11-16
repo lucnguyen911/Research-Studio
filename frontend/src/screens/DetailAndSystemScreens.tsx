@@ -13,7 +13,7 @@ import type {
   RssArticleDto,
   VideoDetailResponseDto,
 } from '../api/types';
-import { IDEA_STATUS_LABELS, formatInt } from '../prototype/demoData';
+import { IDEA_STATUS_LABELS, formatInt, formatSnapshotDeltaLabel } from '../prototype/demoData';
 import type { IdeaItem, IdeaPriority, IdeaStatus } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
 import { usePrototypeWorkspace } from '../state/workspaceContext';
@@ -371,13 +371,7 @@ export const VideoDetailScreen: React.FC = () => {
                 points={snapshots.map((s) => s.viewCount)}
                 labels={snapshots.map((s) => s.capturedAt)}
                 badgeLabel={`${snapshots.length} mốc trong cache`}
-                directionLabel={
-                  snapshots.length >= 2
-                    ? `↗ +${formatInt(snapshots[snapshots.length - 1].viewCount - snapshots[0].viewCount)}`
-                    : snapshots.length === 1
-                      ? '1 mốc'
-                      : '0 mốc'
-                }
+                directionLabel={formatSnapshotDeltaLabel(snapshots)}
                 tooltipTitle="Chuỗi mốc thô <= 30 ngày"
                 tooltipDetail="Không lưu quá 30 ngày lịch và không tính vận tốc Views/ngày."
                 insufficientText="Chưa đủ mốc thu thập"

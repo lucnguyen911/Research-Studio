@@ -81,3 +81,12 @@ export function formatInt(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—';
   return n.toLocaleString('vi-VN');
 }
+
+export function formatSnapshotDeltaLabel(snapshots: Array<{ viewCount: number }>): string {
+  if (snapshots.length === 0) return '0 mốc';
+  if (snapshots.length === 1) return '1 mốc';
+  const delta = snapshots[snapshots.length - 1].viewCount - snapshots[0].viewCount;
+  if (delta > 0) return `↗ +${formatInt(delta)}`;
+  if (delta < 0) return `↘ -${formatInt(Math.abs(delta))}`;
+  return '→ 0';
+}

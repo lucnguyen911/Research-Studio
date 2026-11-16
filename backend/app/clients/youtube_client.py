@@ -83,6 +83,16 @@ async def call_youtube_api(
                     status_code=503,
                 ) from exc
             except httpx.TimeoutException as exc:
+                if bucket == "general_data" and attempt < max_attempts:
+                    await run_db_sync(
+                        quota_service.finalize_quota_call,
+                        call_log_id,
+                        status_code=None,
+                        outcome="timeout_retry",
+                    )
+                    if retry_backoff_sec > 0:
+                        await asyncio.sleep(retry_backoff_sec * attempt)
+                    continue
                 await run_db_sync(
                     quota_service.finalize_quota_call,
                     call_log_id,
@@ -393,7 +403,7 @@ async def fetch_video_categories(
     return results
 
 
-async def search_youtube(
+async def search_youtube_page(
     *,
     query: str,
     object_type: str = "video",
@@ -402,9 +412,10 @@ async def search_youtube(
     published_after: str | None = None,
     order_by: str = "relevance",
     max_results: int = SEARCH_MAX_RESULTS_PER_CALL,
+    page_token: str | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
-) -> list[str]:
-    """Execute manual search.list (1 Search Queries unit, strictly 0 auto-retries) and return IDs."""
+) -> tuple[list[str], str | None]:
+    """Execute manual search.list (1 Search Queries unit, strictly 0 auto-retries) and return (ids, nextPageToken)."""
     params: dict[str, Any] = {
         "part": "id",
         "q": query.strip(),
@@ -416,6 +427,8 @@ async def search_youtube(
     }
     if published_after:
         params["publishedAfter"] = published_after
+    if page_token and page_token.strip():
+        params["pageToken"] = page_token.strip()
 
     payload = await call_youtube_api(
         "search",
@@ -434,7 +447,36 @@ async def search_youtube(
         target_id = id_obj.get("channelId") if object_type == "channel" else id_obj.get("videoId")
         if target_id:
             ids.append(str(target_id).strip())
-    return _dedup_ordered(ids)
+    raw_next = payload.get("nextPageToken")
+    next_page_token = str(raw_next).strip() if isinstance(raw_next, str) and raw_next.strip() else None
+    return _dedup_ordered(ids), next_page_token
+
+
+async def search_youtube(
+    *,
+    query: str,
+    object_type: str = "video",
+    region_code: str = "VN",
+    relevance_language: str = "vi",
+    published_after: str | None = None,
+    order_by: str = "relevance",
+    max_results: int = SEARCH_MAX_RESULTS_PER_CALL,
+    page_token: str | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> list[str]:
+    """Execute manual search.list (1 Search Queries unit, strictly 0 auto-retries) and return IDs."""
+    ids, _ = await search_youtube_page(
+        query=query,
+        object_type=object_type,
+        region_code=region_code,
+        relevance_language=relevance_language,
+        published_after=published_after,
+        order_by=order_by,
+        max_results=max_results,
+        page_token=page_token,
+        transport=transport,
+    )
+    return ids
 
 
 async def fetch_channel_by_identifier(

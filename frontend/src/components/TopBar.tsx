@@ -181,8 +181,14 @@ export const TopBar: React.FC = () => {
         <span className={statusBadge.cls}>{statusBadge.label}</span>
 
         <span
-          className="rs-badge rs-tabular"
-          title={`Ước tính quota YouTube API ngày PT (${quotaStatus.ptDate}) · Reset 00:00 PT`}
+          className={
+            quotaStatus.searchQueries.exhausted || quotaStatus.generalData.exhausted
+              ? 'rs-badge rs-badge-danger rs-tabular'
+              : quotaStatus.searchQueries.warning || quotaStatus.generalData.warning
+                ? 'rs-badge rs-badge-warning rs-tabular'
+                : 'rs-badge rs-tabular'
+          }
+          title={`Ước tính cục bộ từ SQLite ngày PT (${quotaStatus.ptDate}) · Reset 00:00 PT`}
         >
           Search: {quotaStatus.searchQueries.used}/{quotaStatus.searchQueries.limit} · API:{' '}
           {quotaStatus.generalData.used.toLocaleString('vi-VN')}/{quotaStatus.generalData.limit.toLocaleString('vi-VN')}

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Literal
 
 from fastapi import APIRouter
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from app.core.errors import AppError
+from app.core.logging_setup import LOGGER_NAME
 from app.db.connection import run_db_sync
 from app.repositories import project_repo, rss_repo, settings_repo, youtube_repo
 from app.services import competitor_service, quota_service, rss_service
@@ -118,8 +121,13 @@ async def refresh_project_workspace(project_id: str) -> dict[str, object]:
             feed = await run_db_sync(rss_repo.get_feed, fid)
             if feed.get("enabled"):
                 rss_results.append(await rss_service.refresh_single_feed(fid))
-        except Exception:
-            continue
+        except AppError as exc:
+            logging.getLogger(LOGGER_NAME).warning(
+                "Project refresh skipped RSS feed %s (%s): %s",
+                fid,
+                exc.code,
+                exc.message,
+            )
 
     settings = await run_db_sync(settings_repo.get_public_settings)
     competitor_result: dict[str, object] | None = None
