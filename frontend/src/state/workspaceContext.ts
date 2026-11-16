@@ -8,12 +8,10 @@ import type {
   UpdateSystemSettingsPayload,
 } from '../api/types';
 import type {
-  ChannelItem,
   IdeaItem,
   IdeaPriority,
   IdeaSourceType,
   IdeaStatus,
-  KeywordItem,
   ManualFormatLabel,
   ProjectItem,
   RssFeedItem,
@@ -23,12 +21,8 @@ import type {
   VideoItem,
 } from '../prototype/types';
 
-// Remaining screens awaiting Milestone 5 (P2/P3/P4)
-const DEMO_PREVIEW_SCREENS = new Set<ScreenId>([
-  'project-competitors',
-  'project-breakout',
-  'project-keywords',
-]);
+// All MVP screens are wired to real Backend + SQLite
+const DEMO_PREVIEW_SCREENS = new Set<ScreenId>([]);
 
 export function isDemoPreviewScreen(screenId: ScreenId): boolean {
   return DEMO_PREVIEW_SCREENS.has(screenId);
@@ -101,19 +95,20 @@ export interface PrototypeWorkspaceContextValue {
   deleteRssFeed: (feedId: string) => Promise<boolean>;
   refreshAllRssFeeds: (signal?: AbortSignal) => Promise<RssRefreshAllResultDto | null>;
 
-  // Remaining M4/M5 preview helpers (replaced in T13-T17)
-  channels: ChannelItem[];
-  addChannelToProject: (projectId: string, handleOrUrl: string) => void;
-  removeChannelFromProject: (projectId: string, channelId: string) => void;
+  // Real SQLite-backed Competitor, Breakout (Standard Mode) & Keyword actions
+  addChannelToProject: (projectId: string, identifier: string, notes?: string) => Promise<boolean>;
 
   breakoutByProject: Record<string, Record<string, { flagged: boolean; note: string }>>;
-  toggleBreakoutFlag: (projectId: string, videoId: string) => void;
-  setBreakoutNote: (projectId: string, videoId: string, note: string) => void;
+  registerProjectBreakoutStates: (projectId: string, videos: VideoItem[]) => void;
+  toggleBreakoutFlag: (projectId: string, videoId: string) => Promise<boolean>;
+  setBreakoutNote: (
+    projectId: string,
+    videoId: string,
+    note: string,
+    flagged?: boolean,
+  ) => Promise<boolean>;
 
-  keywords: KeywordItem[];
-  addKeyword: (projectId: string, keyword: string, priority: IdeaPriority) => void;
-  deleteKeyword: (keywordId: string) => void;
-  scanKeywordDemo: (keywordId: string) => void;
+  addKeyword: (projectId: string, keyword: string, priority: IdeaPriority, notes?: string) => Promise<boolean>;
 
   ideas: IdeaItem[];
   reloadIdeas: (signal?: AbortSignal) => Promise<void>;

@@ -25,8 +25,9 @@ import { VideoResearchTable } from '../components/VideoResearchTable';
 
 export const ChannelDetailScreen: React.FC = () => {
   const { currentEntry, goBack, navigate } = useAppNavigation();
-  const { registerVideosInMemory } = usePrototypeWorkspace();
+  const { projects, addChannelToProject, registerVideosInMemory } = usePrototypeWorkspace();
   const channelId = currentEntry.params.channelId ?? '';
+  const activeProject = projects.find((p) => p.id === currentEntry.projectId) ?? projects[0] ?? null;
 
   const [state, setState] = useState<{
     key: string;
@@ -113,10 +114,21 @@ export const ChannelDetailScreen: React.FC = () => {
             Cập nhật gần nhất: {formatDateTimeVi(channel.apiFetchedAt)} · Dữ liệu gốc YouTube Data API
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" className="rs-btn rs-btn-secondary" onClick={goBack}>
             ← Quay lại
           </button>
+          {activeProject && !linkedProjects.some((lp) => lp.projectId === activeProject.id) && (
+            <button
+              type="button"
+              className="rs-btn rs-btn-primary"
+              onClick={() => {
+                void addChannelToProject(activeProject.id, channel.channelId);
+              }}
+            >
+              + Theo dõi đối thủ trong {activeProject.name}
+            </button>
+          )}
           <a className="rs-btn rs-btn-tinted" href={channelExternalUrl} target="_blank" rel="noreferrer">
             Mở kênh trên YouTube ↗
           </a>
@@ -196,9 +208,6 @@ export const VideoDetailScreen: React.FC = () => {
     detail: VideoDetailResponseDto | null;
     error: string | null;
   }>({ key: '', detail: null, error: null });
-
-  const breakoutEntry = activeProject && videoId ? breakoutByProject[activeProject.id]?.[videoId] : undefined;
-  const [noteDraft, setNoteDraft] = useState(breakoutEntry?.note ?? '');
 
   useEffect(() => {
     if (!videoId) return undefined;
@@ -419,32 +428,14 @@ export const VideoDetailScreen: React.FC = () => {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {activeProject && (
-            <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <h2 style={{ margin: 0, fontSize: '15.5px' }}>Đánh dấu Bứt phá &amp; Ghi chú ({activeProject.name})</h2>
-              <button
-                type="button"
-                className={`rs-btn ${breakoutEntry?.flagged ? 'rs-btn-primary' : 'rs-btn-secondary'}`}
-                onClick={() => toggleBreakoutFlag(activeProject.id, video.id)}
-              >
-                {breakoutEntry?.flagged ? '★ Đang gắn cờ Video Bứt phá' : '☆ Đánh dấu là Video Bứt phá'}
-              </button>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: '13px', fontWeight: 600 }}>Ghi chú phân tích riêng (nối SQLite ở M5)</span>
-                <textarea
-                  className="rs-textarea"
-                  value={noteDraft}
-                  onChange={(e) => setNoteDraft(e.target.value)}
-                  placeholder="Ghi lại cấu trúc hook, thumbnail, hoặc lý do video thu hút..."
-                />
-              </label>
-              <button
-                type="button"
-                className="rs-btn rs-btn-secondary"
-                onClick={() => setBreakoutNote(activeProject.id, video.id, noteDraft)}
-              >
-                Lưu ghi chú tạm
-              </button>
-            </section>
+            <VideoBreakoutEditor
+              key={`${activeProject.id}:${video.id}:${state.detail.breakout?.notes ?? ''}:${String(state.detail.breakout?.flagged ?? false)}`}
+              projectName={activeProject.name}
+              initialFlagged={breakoutByProject[activeProject.id]?.[video.id]?.flagged ?? state.detail.breakout?.flagged ?? false}
+              initialNote={breakoutByProject[activeProject.id]?.[video.id]?.note ?? state.detail.breakout?.notes ?? ''}
+              onToggleFlag={() => toggleBreakoutFlag(activeProject.id, video.id)}
+              onSaveNote={(note, flagged) => setBreakoutNote(activeProject.id, video.id, note, flagged)}
+            />
           )}
 
           <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -488,6 +479,58 @@ export const VideoDetailScreen: React.FC = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const VideoBreakoutEditor: React.FC<{
+  projectName: string;
+  initialFlagged: boolean;
+  initialNote: string;
+  onToggleFlag: () => Promise<boolean>;
+  onSaveNote: (note: string, flagged: boolean) => Promise<boolean>;
+}> = ({ projectName, initialFlagged, initialNote, onToggleFlag, onSaveNote }) => {
+  const [flagged, setFlagged] = useState(initialFlagged);
+  const [noteDraft, setNoteDraft] = useState(initialNote);
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <h2 style={{ margin: 0, fontSize: '15.5px' }}>Đánh dấu Bứt phá &amp; Ghi chú ({projectName})</h2>
+      <button
+        type="button"
+        className={`rs-btn ${flagged ? 'rs-btn-primary' : 'rs-btn-secondary'}`}
+        disabled={saving}
+        onClick={() => {
+          setSaving(true);
+          void onToggleFlag().then((ok) => {
+            if (ok) setFlagged((f) => !f);
+            setSaving(false);
+          });
+        }}
+      >
+        {flagged ? '★ Đang gắn cờ Video Bứt phá' : '☆ Đánh dấu là Video Bứt phá'}
+      </button>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={{ fontSize: '13px', fontWeight: 600 }}>Ghi chú phân tích riêng (User-Created Data · SQLite)</span>
+        <textarea
+          className="rs-textarea"
+          value={noteDraft}
+          onChange={(e) => setNoteDraft(e.target.value)}
+          placeholder="Ghi lại cấu trúc hook, thumbnail, hoặc lý do video thu hút..."
+        />
+      </label>
+      <button
+        type="button"
+        className="rs-btn rs-btn-secondary"
+        disabled={saving}
+        onClick={() => {
+          setSaving(true);
+          void onSaveNote(noteDraft, flagged).finally(() => setSaving(false));
+        }}
+      >
+        {saving ? 'Đang lưu...' : 'Lưu ghi chú phân tích'}
+      </button>
+    </section>
   );
 };
 

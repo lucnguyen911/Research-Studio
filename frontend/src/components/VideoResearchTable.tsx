@@ -395,7 +395,9 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                             type="button"
                             className={`rs-btn rs-btn-sm ${breakoutState?.flagged ? 'rs-btn-primary' : 'rs-btn-secondary'}`}
                             title={breakoutState?.flagged ? 'Bỏ cờ Đánh dấu Bứt phá thủ công' : 'Đánh dấu Video Bứt phá thủ công'}
-                            onClick={() => toggleBreakoutFlag(projectIdForBreakout, v.id)}
+                            onClick={() => {
+                              void toggleBreakoutFlag(projectIdForBreakout, v.id);
+                            }}
                           >
                             {breakoutState?.flagged ? '★ Đã đánh dấu' : '☆ Bứt phá'}
                           </button>
@@ -424,11 +426,13 @@ export const VideoResearchTable: React.FC<VideoResearchTableProps> = ({
                           >
                             Xem nhanh
                           </button>
-                          {activeProject && !projectIdForBreakout && (
+                          {activeProject && !projectIdForBreakout && v.channelId && (
                             <button
                               type="button"
                               className="rs-btn rs-btn-sm rs-btn-secondary"
-                              onClick={() => addChannelToProject(activeProject.id, `@${v.channelTitle.replace(/\s+/g, '')}`)}
+                              onClick={() => {
+                                void addChannelToProject(activeProject.id, v.channelId);
+                              }}
                             >
                               + Đối thủ
                             </button>

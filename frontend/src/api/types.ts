@@ -148,6 +148,9 @@ export interface YoutubeVideoDto {
   apiFetchedAt: string | null;
   apiExpiresAt: string | null;
   snapshots30d: YoutubeSnapshotDto[];
+  isUserBreakout?: boolean;
+  breakoutNotes?: string;
+  breakoutMarkedAt?: string | null;
 }
 
 export interface YoutubeChannelDto {
@@ -337,6 +340,105 @@ export interface UpsertProjectIdeaLinkPayload {
   projectAngle?: string;
   projectNotes?: string;
   publishedVideoUrl?: string;
+}
+
+export interface CompetitorChannelDto {
+  channelId: string;
+  projectId: string;
+  status: 'active' | 'paused' | 'error';
+  notes: string;
+  addedAt: string;
+  sharedProjectsCount: number;
+  cachedVideoCount: number;
+  hasValidApiData: boolean;
+  apiPurged: boolean;
+  title: string | null;
+  handle: string | null;
+  country: string | null;
+  thumbnailUrl: string | null;
+  subscriberCount: number | null;
+  videoCount: number | null;
+  apiFetchedAt: string | null;
+  apiExpiresAt: string | null;
+}
+
+export interface ProjectCompetitorsResponseDto {
+  projectId: string;
+  channels: CompetitorChannelDto[];
+  videos: YoutubeVideoDto[];
+  addedChannelId?: string;
+  reusedCache?: boolean;
+  quota?: QuotaStatusDto;
+}
+
+export interface CompetitorRefreshResponseDto extends ProjectCompetitorsResponseDto {
+  refreshedCount: number;
+  okCount: number;
+  errorCount: number;
+  results: Array<{
+    channelId: string;
+    status: 'ok' | 'error';
+    videosFetched?: number;
+    errorCode?: string;
+    errorMessage?: string;
+  }>;
+  quota: QuotaStatusDto;
+}
+
+export interface BreakoutVideosResponseDto {
+  projectId: string;
+  mode: 'standard_mode';
+  formatCounts: {
+    longForm: number;
+    shorts: number;
+    unknown: number;
+  };
+  totalCount: number;
+  items: YoutubeVideoDto[];
+}
+
+export interface ProjectKeywordDto {
+  id: string;
+  projectId: string;
+  keyword: string;
+  priority: 'high' | 'medium' | 'low';
+  notes: string;
+  lastScannedAt: string | null;
+  lastSessionId: string | null;
+  sessionExpiresAt: string | null;
+  cachedResultCount: number;
+  rssMatchCount?: number;
+  createdAt: string;
+}
+
+export interface ProjectKeywordsResponseDto {
+  projectId: string;
+  regionCode: string;
+  relevanceLanguage: string;
+  linkedFeedCount: number;
+  items: ProjectKeywordDto[];
+  rssSignals: RssPhrasesResponseDto;
+}
+
+export interface KeywordDetailResponseDto {
+  keyword: ProjectKeywordDto;
+  session: SearchSessionDto | null;
+  videos: YoutubeVideoDto[];
+  rssSourceLabel: string;
+  linkedFeedCount: number;
+  matchedRssArticles: RssArticleDto[];
+}
+
+export interface ScanKeywordsResponseDto {
+  scannedCount: number;
+  scanned: Array<{
+    keywordId: string;
+    keyword: string;
+    session: SearchSessionDto;
+    videos: YoutubeVideoDto[];
+  }>;
+  overview: ProjectKeywordsResponseDto;
+  quota: QuotaStatusDto;
 }
 
 

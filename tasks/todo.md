@@ -328,7 +328,7 @@
 
 ## Milestone 5 — Competitor, Breakout & Keyword Research
 
-### [ ] T15 — Backend & UI `P2. Theo dõi đối thủ` (Phân giải Kênh Tiết kiệm Quota, Mốc Thô `<= 30 Ngày` & Thêm Nhanh từ `G2`/`G3`)
+### [x] T15 — Backend & UI `P2. Theo dõi đối thủ` (Phân giải Kênh Tiết kiệm Quota, Mốc Thô `<= 30 Ngày` & Thêm Nhanh từ `G2`/`G3`)
 - **ID:** T15
 - **TITLE:** Backend & UI `P2. Theo dõi đối thủ` (Phân giải Kênh Tiết kiệm Quota, Mốc Thô `<= 30 Ngày` & Thêm Nhanh Kênh từ `G2`/`G3`)
 - **GOAL:** Triển khai `competitor_service.py` + `project_competitors.py` (phân giải URL/`@handle`/`channel_id` bằng `channels.list` `1 unit`, lấy `30–50` video gần nhất từ playlist `uploads` + `videos.list` lô `50` ID, ghi mốc snapshot thô `<= 30 ngày`, cô lập theo Project) cùng màn hình `P2. Theo dõi đối thủ` tích hợp sẵn `<SaveIdeaModal />` và gắn nút **Thêm kênh vào đối thủ Project** ngay trên `G2`, `G3` và *Chi tiết Kênh*.
@@ -348,7 +348,7 @@
 - **RISK:** MEDIUM
 - **USER APPROVAL REQUIRED:** NO
 
-### [ ] T16 — API Lọc Gọn & Giao diện `P3. Video bứt phá` ở Standard Mode (Dữ liệu Gốc, Đánh dấu Thủ công & Lưu Ý tưởng)
+### [x] T16 — API Lọc Gọn & Giao diện `P3. Video bứt phá` ở Standard Mode (Dữ liệu Gốc, Đánh dấu Thủ công & Lưu Ý tưởng)
 - **ID:** T16
 - **TITLE:** API Lọc Gọn & Giao diện `P3. Video bứt phá` ở Standard Mode (Dữ liệu Gốc, Đánh dấu Thủ công & Tích hợp Lưu Ý tưởng)
 - **GOAL:** Bổ sung truy vấn sàng lọc + endpoint bật/tắt cờ `Đánh dấu Bứt phá thủ công` (`project_videos`) trực tiếp vào `youtube_repo.py` và `project_competitors.py` (không tách `breakout_standard_service.py` dư thừa), và xây dựng màn hình `P3. Video bứt phá (Standard Mode)`: lọc cửa sổ ngày (`3/7/14/30 ngày`), tách 3 trạng thái định dạng nguồn + nhãn thủ công, lọc ngưỡng `viewCount`/`likeCount`/`commentCount` gốc, sắp xếp trường gốc, hiển thị khung công bố minh bạch những gì hiện có vs. chưa khả dụng, và tích hợp `<SaveIdeaModal />`.
@@ -367,7 +367,7 @@
 - **RISK:** MEDIUM
 - **USER APPROVAL REQUIRED:** NO
 
-### [ ] T17 — Backend & UI `P4. Nghiên cứu từ khóa` ở Standard Mode, Đối chiếu RSS Project & Lưu Nhanh Từ khóa từ `G3`
+### [x] T17 — Backend & UI `P4. Nghiên cứu từ khóa` ở Standard Mode, Đối chiếu RSS Project & Lưu Nhanh Từ khóa từ `G3`
 - **ID:** T17
 - **TITLE:** Backend & UI `P4. Nghiên cứu từ khóa` ở Standard Mode, Đối chiếu RSS Project & Lưu Nhanh Từ khóa từ `G3`
 - **GOAL:** Tập trung toàn bộ CRUD từ khóa Project (`project_keywords`), quét YouTube theo yêu cầu áp dụng `regionCode`/`relevanceLanguage` của Project (xác nhận tổng lượt `Search Queries` khi quét nhiều từ khóa, nút Cancel), đối chiếu bài báo/cụm từ từ các nguồn RSS đã gắn với Project (`project_rss_feeds`), xây dựng màn hình `P4. Nghiên cứu từ khóa (Standard Mode)` tích hợp `<SaveIdeaModal />`, và gắn nút **Lưu từ khóa `q` vào Project** ngay trên `G3. Nghiên cứu tự do`.
@@ -389,8 +389,8 @@
 - **USER APPROVAL REQUIRED:** NO
 
 ### Checkpoint M5 — Competitor, Breakout & Keyword Research (Full Project Research)
-- [ ] Toàn bộ test `T15`–`T17` pass 100%; frontend `typecheck`/`lint`/`build` sạch.
-- [ ] Chạy thử trên trình duyệt qua Chrome DevTools MCP toàn bộ nghiệp vụ Project: thêm đối thủ (`P2`) → sàng lọc `Video bứt phá` (`P3`) → quản lý & quét Từ khóa đối chiếu RSS (`P4`) → đẩy thẳng sang Ý tưởng (`P5`).
+- [x] Toàn bộ test `T15`–`T17` pass 100%; frontend `typecheck`/`lint`/`build` sạch.
+- [x] Chạy thử trên trình duyệt qua Chrome DevTools MCP toàn bộ nghiệp vụ Project: thêm đối thủ (`P2`) → sàng lọc `Video bứt phá` (`P3`) → quản lý & quét Từ khóa đối chiếu RSS (`P4`) → đẩy thẳng sang Ý tưởng (`P5`).
 
 ---
 

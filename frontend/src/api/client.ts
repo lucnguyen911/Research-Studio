@@ -1,12 +1,18 @@
 import type {
   ApiErrorEnvelope,
+  BreakoutVideosResponseDto,
   ChannelDetailResponseDto,
+  CompetitorRefreshResponseDto,
   CreateIdeaPayload,
   CreateProjectPayload,
   DeleteProjectResultDto,
   FreeSearchResponseDto,
   IdeaDto,
+  KeywordDetailResponseDto,
+  ProjectCompetitorsResponseDto,
   ProjectDto,
+  ProjectKeywordDto,
+  ProjectKeywordsResponseDto,
   PurgeCacheResultDto,
   QuotaStatusDto,
   RssArticleDto,
@@ -14,6 +20,7 @@ import type {
   RssPhrasesResponseDto,
   RssRefreshAllResultDto,
   RssSingleRefreshResultDto,
+  ScanKeywordsResponseDto,
   SearchSessionDetailDto,
   SearchSessionDto,
   SystemSettingsDto,
@@ -599,6 +606,217 @@ export async function detachIdeaFromProjectApi(
     },
   );
   return res.idea;
+}
+
+export async function fetchProjectCompetitorsApi(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ProjectCompetitorsResponseDto> {
+  return apiRequest<ProjectCompetitorsResponseDto>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/competitors`,
+    { signal },
+  );
+}
+
+export async function addProjectCompetitorApi(
+  projectId: string,
+  identifier: string,
+  notes = '',
+  signal?: AbortSignal,
+): Promise<ProjectCompetitorsResponseDto> {
+  return apiRequest<ProjectCompetitorsResponseDto>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/competitors`,
+    {
+      method: 'POST',
+      body: { identifier, notes },
+      signal,
+    },
+  );
+}
+
+export async function updateProjectCompetitorApi(
+  projectId: string,
+  channelId: string,
+  patch: { status?: 'active' | 'paused' | 'error'; notes?: string },
+  signal?: AbortSignal,
+): Promise<ProjectCompetitorsResponseDto> {
+  return apiRequest<ProjectCompetitorsResponseDto>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/competitors/${encodeURIComponent(channelId)}`,
+    {
+      method: 'PATCH',
+      body: patch,
+      signal,
+    },
+  );
+}
+
+export async function refreshAllProjectCompetitorsApi(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<CompetitorRefreshResponseDto> {
+  return apiRequest<CompetitorRefreshResponseDto>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/competitors/refresh-all`,
+    {
+      method: 'POST',
+      signal,
+    },
+  );
+}
+
+export async function refreshSingleProjectCompetitorApi(
+  projectId: string,
+  channelId: string,
+  signal?: AbortSignal,
+): Promise<CompetitorRefreshResponseDto> {
+  return apiRequest<CompetitorRefreshResponseDto>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/competitors/${encodeURIComponent(channelId)}/refresh`,
+    {
+      method: 'POST',
+      signal,
+    },
+  );
+}
+
+export async function deleteProjectCompetitorApi(
+  projectId: string,
+  channelId: string,
+  signal?: AbortSignal,
+): Promise<ProjectCompetitorsResponseDto> {
+  return apiRequest<ProjectCompetitorsResponseDto>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/competitors/${encodeURIComponent(channelId)}`,
+    {
+      method: 'DELETE',
+      signal,
+    },
+  );
+}
+
+export async function fetchProjectBreakoutVideosApi(
+  projectId: string,
+  options?: {
+    daysWindow?: number | null;
+    sourceFormat?: 'all' | 'long_form' | 'shorts' | 'unknown';
+    includeManual?: boolean;
+    minViews?: number | null;
+    onlyFlagged?: boolean;
+    sortBy?: 'viewCount' | 'likeCount' | 'commentCount' | 'publishedAt' | 'durationSeconds';
+    sortDir?: 'desc' | 'asc';
+  },
+  signal?: AbortSignal,
+): Promise<BreakoutVideosResponseDto> {
+  const qs = new URLSearchParams();
+  if (options?.daysWindow && options.daysWindow > 0) qs.set('daysWindow', String(options.daysWindow));
+  if (options?.sourceFormat) qs.set('sourceFormat', options.sourceFormat);
+  if (options?.includeManual) qs.set('includeManual', 'true');
+  if (options?.minViews && options.minViews > 0) qs.set('minViews', String(options.minViews));
+  if (options?.onlyFlagged) qs.set('onlyFlagged', 'true');
+  if (options?.sortBy) qs.set('sortBy', options.sortBy);
+  if (options?.sortDir) qs.set('sortDir', options.sortDir);
+  const query = qs.toString();
+  return apiRequest<BreakoutVideosResponseDto>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/breakout-videos${query ? `?${query}` : ''}`,
+    { signal },
+  );
+}
+
+export async function updateVideoBreakoutApi(
+  projectId: string,
+  videoId: string,
+  patch: { flagged?: boolean; notes?: string },
+  signal?: AbortSignal,
+): Promise<{ projectId: string; videoId: string; flagged: boolean; notes: string; markedAt: string | null }> {
+  return apiRequest<{ projectId: string; videoId: string; flagged: boolean; notes: string; markedAt: string | null }>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/videos/${encodeURIComponent(videoId)}/breakout`,
+    {
+      method: 'PUT',
+      body: patch,
+      signal,
+    },
+  );
+}
+
+export async function fetchProjectKeywordsApi(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<ProjectKeywordsResponseDto> {
+  return apiRequest<ProjectKeywordsResponseDto>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/keywords`,
+    { signal },
+  );
+}
+
+export async function createProjectKeywordApi(
+  projectId: string,
+  payload: { keyword: string; priority: 'high' | 'medium' | 'low'; notes?: string },
+  signal?: AbortSignal,
+): Promise<ProjectKeywordDto> {
+  const res = await apiRequest<{ item: ProjectKeywordDto }>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/keywords`,
+    {
+      method: 'POST',
+      body: payload,
+      signal,
+    },
+  );
+  return res.item;
+}
+
+export async function updateProjectKeywordApi(
+  projectId: string,
+  keywordId: string,
+  patch: { priority?: 'high' | 'medium' | 'low'; notes?: string },
+  signal?: AbortSignal,
+): Promise<ProjectKeywordDto> {
+  const res = await apiRequest<{ item: ProjectKeywordDto }>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/keywords/${encodeURIComponent(keywordId)}`,
+    {
+      method: 'PATCH',
+      body: patch,
+      signal,
+    },
+  );
+  return res.item;
+}
+
+export async function deleteProjectKeywordApi(
+  projectId: string,
+  keywordId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await apiRequest<{ deleted: boolean; keywordId: string }>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/keywords/${encodeURIComponent(keywordId)}`,
+    {
+      method: 'DELETE',
+      signal,
+    },
+  );
+}
+
+export async function fetchKeywordDetailApi(
+  projectId: string,
+  keywordId: string,
+  signal?: AbortSignal,
+): Promise<KeywordDetailResponseDto> {
+  return apiRequest<KeywordDetailResponseDto>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/keywords/${encodeURIComponent(keywordId)}`,
+    { signal },
+  );
+}
+
+export async function scanProjectKeywordsApi(
+  projectId: string,
+  keywordIds: string[],
+  maxResults = 25,
+  signal?: AbortSignal,
+): Promise<ScanKeywordsResponseDto> {
+  return apiRequest<ScanKeywordsResponseDto>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}/keywords/scan`,
+    {
+      method: 'POST',
+      body: { keywordIds, maxResults },
+      signal,
+    },
+  );
 }
 
 

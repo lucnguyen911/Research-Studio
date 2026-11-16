@@ -38,7 +38,6 @@ export const TopBar: React.FC = () => {
     quotaStatus,
     projects,
     cachedVideosById,
-    channels,
     ideas,
   } = usePrototypeWorkspace();
 
@@ -63,11 +62,12 @@ export const TopBar: React.FC = () => {
       ];
     }
     if (sid === 'channel-detail') {
-      const ch = channels.find((c) => c.id === currentEntry.params.channelId);
+      const chId = currentEntry.params.channelId;
+      const sampleVid = chId ? Object.values(cachedVideosById).find((v) => v.channelId === chId) : undefined;
       return [
         { label: activeProject ? activeProject.name : 'Project', onClick: () => navigate('project-overview') },
         { label: 'Theo dõi đối thủ', onClick: () => navigate('project-competitors') },
-        { label: ch?.title ?? 'Chi tiết kênh' },
+        { label: sampleVid?.channelTitle ?? chId ?? 'Chi tiết kênh' },
       ];
     }
     if (sid === 'video-detail') {

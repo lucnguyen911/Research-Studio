@@ -509,3 +509,198 @@ def list_channel_valid_videos(
         ).fetchall()
         snaps = _load_snapshots_map(conn, [r["video_id"] for r in rows], now_iso)
     return [_row_to_video_dto(r, snaps.get(r["video_id"], []), now_iso) for r in rows]
+
+
+def upsert_project_video_breakout(
+    project_id: str,
+    video_id: str,
+    *,
+    is_user_breakout: bool | None = None,
+    notes: str | None = None,
+    now_utc: datetime | None = None,
+) -> dict[str, Any]:
+    """Create or update manual breakout flag and user notes isolated per project_id."""
+    utc_now = _normalize_utc(now_utc)
+    now_iso = utc_now.isoformat()
+
+    with write_db() as conn:
+        proj = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if proj is None:
+            raise AppError("PROJECT_NOT_FOUND", "Không tìm thấy Project yêu cầu.", status_code=404)
+        vid = conn.execute("SELECT video_id FROM youtube_videos WHERE video_id = ?", (video_id,)).fetchone()
+        if vid is None:
+            raise AppError("VIDEO_NOT_FOUND", "Không tìm thấy bản ghi video trong SQLite.", status_code=404)
+
+        existing = conn.execute(
+            "SELECT * FROM project_videos WHERE project_id = ? AND video_id = ?",
+            (project_id, video_id),
+        ).fetchone()
+        if existing is None:
+            flagged = bool(is_user_breakout) if is_user_breakout is not None else False
+            clean_notes = "" if notes is None else notes.strip()
+            marked_at = now_iso if flagged else None
+            conn.execute(
+                """
+                INSERT INTO project_videos (id, project_id, video_id, is_user_breakout, notes, marked_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (f"pv-{project_id[:6]}-{video_id[:16]}", project_id, video_id, 1 if flagged else 0, clean_notes, marked_at),
+            )
+        else:
+            flagged = bool(existing["is_user_breakout"]) if is_user_breakout is None else bool(is_user_breakout)
+            clean_notes = existing["notes"] if notes is None else notes.strip()
+            marked_at = existing["marked_at"]
+            if is_user_breakout is not None:
+                marked_at = now_iso if flagged else None
+            conn.execute(
+                """
+                UPDATE project_videos
+                SET is_user_breakout = ?, notes = ?, marked_at = ?
+                WHERE id = ?
+                """,
+                (1 if flagged else 0, clean_notes, marked_at, existing["id"]),
+            )
+
+    return {
+        "projectId": project_id,
+        "videoId": video_id,
+        "flagged": flagged,
+        "notes": clean_notes,
+        "markedAt": marked_at,
+    }
+
+
+def list_project_breakout_videos(
+    project_id: str,
+    *,
+    days_window: int | None = None,
+    source_format: str = "all",
+    include_manual: bool = False,
+    min_views: int | None = None,
+    only_flagged: bool = False,
+    sort_by: str = "viewCount",
+    sort_dir: str = "desc",
+    now_utc: datetime | None = None,
+) -> dict[str, Any]:
+    """
+    Screen competitor and manually flagged project videos in Standard Mode.
+
+    Reads only raw YouTube API fields within the <=30-day TTL (plus user flags/notes),
+    strictly keeps 'unknown' separate from 'long_form' and 'shorts' counts, and
+    never computes prohibited derived metrics (Outlier Multiplier, Views/day, Engagement Rate, Channel Median).
+    """
+    utc_now = _normalize_utc(now_utc)
+    now_iso = utc_now.isoformat()
+
+    with read_db() as conn:
+        proj = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if proj is None:
+            raise AppError("PROJECT_NOT_FOUND", "Không tìm thấy Project yêu cầu.", status_code=404)
+
+        rows = conn.execute(
+            """
+            SELECT
+                v.*,
+                ufl.manual_format,
+                COALESCE(pv.is_user_breakout, 0) AS is_user_breakout,
+                COALESCE(pv.notes, '') AS breakout_notes,
+                pv.marked_at
+            FROM youtube_videos v
+            LEFT JOIN user_video_format_labels ufl ON ufl.video_id = v.video_id
+            LEFT JOIN project_videos pv ON pv.video_id = v.video_id AND pv.project_id = ?
+            WHERE (
+                v.channel_id IN (SELECT channel_id FROM project_channels WHERE project_id = ?)
+                OR pv.id IS NOT NULL
+            )
+            """,
+            (project_id, project_id),
+        ).fetchall()
+        snaps = _load_snapshots_map(conn, [str(r["video_id"]) for r in rows], now_iso)
+
+    source_format_counts = {"longForm": 0, "shorts": 0, "unknown": 0}
+    candidates: list[dict[str, Any]] = []
+    cutoff_dt = (utc_now - timedelta(days=days_window)) if days_window and days_window > 0 else None
+
+    for row in rows:
+        vid = str(row["video_id"])
+        dto = _row_to_video_dto(row, snaps.get(vid, []), now_iso)
+        flagged = bool(row["is_user_breakout"])
+        dto["isUserBreakout"] = flagged
+        dto["breakoutNotes"] = row["breakout_notes"] or ""
+        dto["breakoutMarkedAt"] = row["marked_at"]
+
+        if not dto["hasValidApiData"]:
+            if not (only_flagged and flagged):
+                continue
+        else:
+            sf = dto["sourceFormatStatus"]
+            if sf == "long_form":
+                source_format_counts["longForm"] += 1
+            elif sf == "shorts":
+                source_format_counts["shorts"] += 1
+            else:
+                source_format_counts["unknown"] += 1
+
+        if only_flagged and not flagged:
+            continue
+
+        if cutoff_dt is not None:
+            if not dto["hasValidApiData"] or not dto["publishedAt"]:
+                if not (only_flagged and flagged):
+                    continue
+            else:
+                try:
+                    pub_dt = datetime.fromisoformat(str(dto["publishedAt"]).replace("Z", "+00:00"))
+                    if pub_dt.tzinfo is None:
+                        pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+                    if pub_dt.astimezone(timezone.utc) < cutoff_dt:
+                        continue
+                except ValueError:
+                    continue
+
+        if min_views is not None and min_views > 0:
+            if dto["viewCount"] is None or int(dto["viewCount"]) < min_views:
+                continue
+
+        if source_format in ("long_form", "shorts", "unknown"):
+            matches_source = dto["sourceFormatStatus"] == source_format
+            matches_manual = include_manual and source_format != "unknown" and dto["manualFormat"] == source_format
+            if not matches_source and not matches_manual:
+                continue
+
+        candidates.append(dto)
+
+    reverse = sort_dir != "asc"
+
+    def _sort_key(item: dict[str, Any]) -> tuple[int, Any]:
+        if sort_by == "publishedAt":
+            val = item.get("publishedAt") or ""
+            return (0 if val else 1, str(val))
+        if sort_by == "durationSeconds":
+            val = item.get("durationSeconds")
+            return (0 if val is not None else 1, int(val or 0))
+        if sort_by == "likeCount":
+            val = item.get("likeCount")
+            return (0 if val is not None else 1, int(val or 0))
+        if sort_by == "commentCount":
+            val = item.get("commentCount")
+            return (0 if val is not None else 1, int(val or 0))
+        val = item.get("viewCount")
+        return (0 if val is not None else 1, int(val or 0))
+
+    if reverse:
+        candidates.sort(key=_sort_key, reverse=True)
+        # Put missing-value items (api_purged or missing stats) at the end even in descending order
+        with_val = [item for item in candidates if _sort_key(item)[0] == 0]
+        without_val = [item for item in candidates if _sort_key(item)[0] == 1]
+        candidates = [*with_val, *without_val]
+    else:
+        candidates.sort(key=_sort_key)
+
+    return {
+        "projectId": project_id,
+        "mode": "standard_mode",
+        "formatCounts": source_format_counts,
+        "totalCount": len(candidates),
+        "items": candidates,
+    }

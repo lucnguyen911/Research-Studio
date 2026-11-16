@@ -708,7 +708,9 @@ export const FreeResearchScreen: React.FC = () => {
           <button
             type="button"
             className="rs-btn rs-btn-secondary"
-            onClick={() => addKeyword(activeProject.id, queryInput.trim(), 'medium')}
+            onClick={() => {
+              void addKeyword(activeProject.id, queryInput.trim(), 'medium');
+            }}
           >
             + Lưu từ khóa vào {activeProject.name}
           </button>

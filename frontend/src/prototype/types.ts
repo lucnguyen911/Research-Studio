@@ -104,6 +104,8 @@ export interface VideoItem {
   regionCode?: string;
   categoryName?: string;
   projectIds: string[];
+  isUserBreakout?: boolean;
+  breakoutNotes?: string;
   apiFetchedAt: string;
   apiExpiresAt: string;
 }
@@ -172,16 +174,6 @@ export interface IdeaItem {
   tags: string[];
   updatedAt: string;
   projectLinks: Record<string, ProjectIdeaLink>;
-}
-
-export interface SearchSessionDemo {
-  id: string;
-  query: string;
-  regionCode: string;
-  language: string;
-  createdAt: string;
-  expiresAt: string;
-  videoIds: string[];
 }
 
 export interface RouteParams {

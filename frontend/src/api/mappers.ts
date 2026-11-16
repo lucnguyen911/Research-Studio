@@ -74,6 +74,8 @@ export function mapYoutubeVideoDtoToItem(dto: YoutubeVideoDto): VideoItem {
       viewCount: snap.viewCount ?? 0,
     })),
     projectIds: [],
+    isUserBreakout: dto.isUserBreakout,
+    breakoutNotes: dto.breakoutNotes,
     apiFetchedAt: formatDateTimeVi(dto.apiFetchedAt),
     apiExpiresAt: formatDateTimeVi(dto.apiExpiresAt),
   };

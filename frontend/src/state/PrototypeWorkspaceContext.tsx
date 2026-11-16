@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ApiClientError,
+  addProjectCompetitorApi,
   createIdeaApi,
   createProjectApi,
+  createProjectKeywordApi,
   createRssFeedApi,
   deleteIdeaApi,
   deleteProjectApi,
@@ -27,9 +29,10 @@ import {
   updateProjectRssFeedsApi,
   updateRssFeedApi,
   updateSystemSettingsApi,
+  updateVideoBreakoutApi,
   upsertProjectIdeaLinkApi,
 } from '../api/client';
-import { mapIdeaDtoToItem, mapRssFeedDtoToItem } from '../api/mappers';
+import { mapIdeaDtoToItem, mapRssFeedDtoToItem, mapYoutubeVideoDtoToItem } from '../api/mappers';
 import type {
   ProjectDto,
   PurgeCacheResultDto,
@@ -39,13 +42,10 @@ import type {
   SystemSettingsDto,
   UpdateSystemSettingsPayload,
 } from '../api/types';
-import { DEMO_CHANNELS, DEMO_KEYWORDS } from '../prototype/demoData';
 import type {
-  ChannelItem,
   IdeaItem,
   IdeaPriority,
   IdeaStatus,
-  KeywordItem,
   ManualFormatLabel,
   ProjectItem,
   ThemeMode,
@@ -166,10 +166,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
   const [cachedVideosById, setCachedVideosById] = useState<Record<string, VideoItem>>({});
   const [manualFormatMap, setManualFormatMap] = useState<Record<string, ManualFormatLabel>>({});
 
-  // Remaining M5 preview states (replaced cleanly in T15-T17)
   const [previewUiMode, setPreviewUiMode] = useState<UiSimulatorMode>('normal');
-  const [channels, setChannels] = useState<ChannelItem[]>(DEMO_CHANNELS);
-  const [keywords, setKeywords] = useState<KeywordItem[]>(DEMO_KEYWORDS);
   const [ideas, setIdeas] = useState<IdeaItem[]>([]);
   const [breakoutByProject, setBreakoutByProject] = useState<
     Record<string, Record<string, { flagged: boolean; note: string }>>
@@ -501,6 +498,11 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
       try {
         const result = await deleteProjectApi(projectId, confirmName);
         setProjects((prev) => prev.filter((p) => p.id !== projectId));
+        setBreakoutByProject((prev) => {
+          const next = { ...prev };
+          delete next[projectId];
+          return next;
+        });
         setBackendOnline(true);
         await reloadIdeas();
         pushToast(
@@ -689,82 +691,129 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
     [pushToast, reloadRssFeeds],
   );
 
-  // Legacy preview helpers solely for remaining M4/M5 DEMO preview screens
-  const toggleBreakoutFlag = (projectId: string, videoId: string) => {
+  const registerProjectBreakoutStates = useCallback((projectId: string, videos: VideoItem[]) => {
+    if (!projectId || videos.length === 0) return;
     setBreakoutByProject((prev) => {
-      const projMap = prev[projectId] ?? {};
-      const existing = projMap[videoId] ?? { flagged: false, note: '' };
-      return {
-        ...prev,
-        [projectId]: { ...projMap, [videoId]: { ...existing, flagged: !existing.flagged } },
-      };
+      const existingProj = prev[projectId] ?? {};
+      const nextProj = { ...existingProj };
+      let changed = false;
+      for (const v of videos) {
+        if (v.isUserBreakout !== undefined || v.breakoutNotes !== undefined) {
+          const flagged = Boolean(v.isUserBreakout);
+          const note = v.breakoutNotes ?? '';
+          const cur = nextProj[v.id];
+          if (!cur || cur.flagged !== flagged || cur.note !== note) {
+            nextProj[v.id] = { flagged, note };
+            changed = true;
+          }
+        }
+      }
+      return changed ? { ...prev, [projectId]: nextProj } : prev;
     });
-  };
+  }, []);
 
-  const setBreakoutNote = (projectId: string, videoId: string, note: string) => {
-    setBreakoutByProject((prev) => {
-      const projMap = prev[projectId] ?? {};
-      const existing = projMap[videoId] ?? { flagged: false, note: '' };
-      return {
-        ...prev,
-        [projectId]: { ...projMap, [videoId]: { ...existing, note } },
-      };
-    });
-  };
+  const toggleBreakoutFlag = useCallback(
+    async (projectId: string, videoId: string): Promise<boolean> => {
+      const existing = breakoutByProject[projectId]?.[videoId] ?? { flagged: false, note: '' };
+      const desired = !existing.flagged;
+      try {
+        const res = await updateVideoBreakoutApi(projectId, videoId, { flagged: desired });
+        setBreakoutByProject((prev) => ({
+          ...prev,
+          [projectId]: {
+            ...(prev[projectId] ?? {}),
+            [videoId]: { flagged: res.flagged, note: res.notes },
+          },
+        }));
+        pushToast(
+          'success',
+          res.flagged ? 'Đã gắn cờ Đánh dấu Bứt phá thủ công.' : 'Đã bỏ cờ Đánh dấu Bứt phá.',
+        );
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể cập nhật cờ Đánh dấu Bứt phá.'));
+        }
+        return false;
+      }
+    },
+    [breakoutByProject, pushToast],
+  );
 
-  const addChannelToProject = (projectId: string, handleOrUrl: string) => {
-    const cleaned = handleOrUrl.trim();
-    if (!cleaned) return;
-    setChannels((prev) => [
-      {
-        id: `ch-${Date.now().toString(36)}`,
-        title: cleaned,
-        handle: cleaned.startsWith('@') ? cleaned : `@${cleaned.slice(0, 18)}`,
-        subscriberCount: 0,
-        videoCount: 0,
-        country: 'VN',
-        projectIds: [projectId],
-        projectNotes: { [projectId]: 'Xem trước M5' },
-        lastFetchedAt: 'DEMO',
-        statusByProject: { [projectId]: 'active' },
-      },
-      ...prev,
-    ]);
-  };
+  const setBreakoutNote = useCallback(
+    async (projectId: string, videoId: string, note: string, flagged?: boolean): Promise<boolean> => {
+      try {
+        const res = await updateVideoBreakoutApi(projectId, videoId, {
+          notes: note,
+          ...(flagged !== undefined ? { flagged } : {}),
+        });
+        setBreakoutByProject((prev) => ({
+          ...prev,
+          [projectId]: {
+            ...(prev[projectId] ?? {}),
+            [videoId]: { flagged: res.flagged, note: res.notes },
+          },
+        }));
+        pushToast('success', 'Đã lưu ghi chú phân tích video vào SQLite.');
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể lưu ghi chú phân tích.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
 
-  const removeChannelFromProject = (projectId: string, channelId: string) => {
-    setChannels((prev) =>
-      prev.map((c) => (c.id === channelId ? { ...c, projectIds: c.projectIds.filter((pid) => pid !== projectId) } : c)),
-    );
-  };
+  const addChannelToProject = useCallback(
+    async (projectId: string, identifier: string, notes = ''): Promise<boolean> => {
+      const cleaned = identifier.trim();
+      if (!cleaned) return false;
+      try {
+        const res = await addProjectCompetitorApi(projectId, cleaned, notes);
+        registerVideosInMemory(res.videos.map(mapYoutubeVideoDtoToItem));
+        if (res.quota) {
+          setQuotaStatus(res.quota);
+        } else {
+          await syncQuotaStatus();
+        }
+        setBackendOnline(true);
+        pushToast(
+          'success',
+          res.reusedCache
+            ? 'Đã gắn kênh đối thủ từ bộ nhớ đệm dùng chung (0 quota API).'
+            : `Đã thêm kênh đối thủ và nạp ${res.videos.length} video (0 lượt Search Queries).`,
+        );
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể thêm kênh đối thủ vào Project.'));
+        }
+        return false;
+      }
+    },
+    [pushToast, registerVideosInMemory, syncQuotaStatus],
+  );
 
-  const addKeyword = (projectId: string, keyword: string, priority: IdeaPriority) => {
-    const trimmed = keyword.trim();
-    if (!trimmed) return;
-    setKeywords((prev) => [
-      {
-        id: `kw-${Date.now().toString(36)}`,
-        projectId,
-        keyword: trimmed,
-        priority,
-        notes: 'Xem trước M5',
-        lastScannedAt: null,
-        matchedVideoIds: [],
-        rssMatchCount: 0,
-      },
-      ...prev,
-    ]);
-  };
-
-  const deleteKeyword = (keywordId: string) => {
-    setKeywords((prev) => prev.filter((k) => k.id !== keywordId));
-  };
-
-  const scanKeywordDemo = (keywordId: string) => {
-    setKeywords((prev) =>
-      prev.map((k) => (k.id === keywordId ? { ...k, lastScannedAt: 'DEMO' } : k)),
-    );
-  };
+  const addKeyword = useCallback(
+    async (projectId: string, keyword: string, priority: IdeaPriority, notes = ''): Promise<boolean> => {
+      const trimmed = keyword.trim();
+      if (!trimmed) return false;
+      try {
+        const created = await createProjectKeywordApi(projectId, { keyword: trimmed, priority, notes });
+        setBackendOnline(true);
+        pushToast('success', `Đã lưu từ khóa "${created.keyword}" vào Project (0 quota).`);
+        return true;
+      } catch (err) {
+        if (!isAbortError(err)) {
+          pushToast('error', formatErrorToast(err, 'Không thể lưu từ khóa vào Project.'));
+        }
+        return false;
+      }
+    },
+    [pushToast],
+  );
 
   const saveIdea: PrototypeWorkspaceContextValue['saveIdea'] = useCallback(
     async (input): Promise<boolean> => {
@@ -981,16 +1030,12 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         retryRssFeed,
         deleteRssFeed,
         refreshAllRssFeeds,
-        channels,
         addChannelToProject,
-        removeChannelFromProject,
         breakoutByProject,
+        registerProjectBreakoutStates,
         toggleBreakoutFlag,
         setBreakoutNote,
-        keywords,
         addKeyword,
-        deleteKeyword,
-        scanKeywordDemo,
         ideas,
         reloadIdeas,
         saveIdea,
