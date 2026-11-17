@@ -1,4 +1,6 @@
 import React from 'react';
+import { getActiveLocale, getTranslations } from '../i18n/translations';
+import { usePrototypeWorkspace } from '../state/workspaceContext';
 
 interface SparklineCellProps {
   points: number[];
@@ -17,13 +19,18 @@ export const SparklineCell: React.FC<SparklineCellProps> = ({
   directionLabel,
   tooltipTitle,
   tooltipDetail,
-  insufficientText = 'Chưa đủ mốc (>= 2 lần lấy <= 30 ngày)',
+  insufficientText,
 }) => {
+  const { uiLanguage } = usePrototypeWorkspace();
+  const t = getTranslations(uiLanguage).sparkline;
+  const locale = getActiveLocale(uiLanguage);
+  const resolvedInsufficient = insufficientText ?? t.defaultInsufficient;
+
   if (points.length < 2) {
     return (
       <div className="rs-spark-wrap" tabIndex={0}>
         <span className="rs-badge" style={{ fontWeight: 500 }}>
-          {insufficientText}
+          {resolvedInsufficient}
         </span>
         <div className="rs-spark-tooltip" role="tooltip">
           <strong>{tooltipTitle}</strong>
@@ -87,8 +94,8 @@ export const SparklineCell: React.FC<SparklineCellProps> = ({
             className="rs-tabular"
             style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}
           >
-            <span>{labels?.[idx] ?? `Mốc ${idx + 1}`}</span>
-            <strong>{c.val.toLocaleString('vi-VN')}</strong>
+            <span>{labels?.[idx] ?? t.pointLabel(idx)}</span>
+            <strong>{c.val.toLocaleString(locale)}</strong>
           </div>
         ))}
       </div>

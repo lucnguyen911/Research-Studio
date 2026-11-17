@@ -1350,3 +1350,53 @@ textarea {
   align-items: center;
   gap: 5px;
 }
+
+/* Compact TopBar Language Switcher */
+.rs-topbar-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--rs-radius-md);
+  border: 1px solid var(--rs-border);
+  background: var(--rs-bg-card);
+  color: var(--rs-text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: border-color 0.14s ease, color 0.14s ease;
+}
+
+.rs-topbar-lang:hover {
+  border-color: var(--rs-border-strong);
+  color: var(--rs-text-primary);
+}
+
+.rs-topbar-lang:focus-within {
+  outline: 2px solid var(--rs-accent);
+  outline-offset: 2px;
+}
+
+.rs-topbar-lang-select {
+  appearance: none;
+  border: none;
+  background: transparent;
+  background-image: var(--rs-select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+  background-size: 13px 13px;
+  padding: 4px 18px 4px 2px;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.rs-topbar-lang-select:focus {
+  outline: none;
+}
+
+.rs-topbar-lang-select option {
+  background: var(--rs-bg-card);
+  color: var(--rs-text-primary);
+}

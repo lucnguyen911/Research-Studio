@@ -1,3 +1,4 @@
+import { getTranslations } from '../i18n/translations';
 import type {
   ApiErrorEnvelope,
   BreakoutVideosResponseDto,
@@ -94,13 +95,13 @@ async function parseErrorResponse(response: Response): Promise<ApiClientError> {
   if (response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504) {
     return new ApiClientError(
       'NETWORK_UNREACHABLE',
-      'Không kết nối được dịch vụ dữ liệu cục bộ.',
+      getTranslations().toasts.networkUnreachable,
       response.status,
     );
   }
   return new ApiClientError(
     `HTTP_${response.status}`,
-    `Yêu cầu máy chủ thất bại (HTTP ${response.status}).`,
+    getTranslations().toasts.httpFailed(response.status),
     response.status,
   );
 }
@@ -135,7 +136,7 @@ export async function apiRequest<T>(
     }
     throw new ApiClientError(
       'NETWORK_UNREACHABLE',
-      'Không kết nối được dịch vụ dữ liệu cục bộ.',
+      getTranslations().toasts.networkUnreachable,
       0,
     );
   }
@@ -161,7 +162,7 @@ export async function apiDownloadFile(
     });
   } catch (err) {
     if (isAbortError(err)) throw err;
-    throw new ApiClientError('NETWORK_UNREACHABLE', 'Không kết nối được dịch vụ dữ liệu cục bộ.', 0);
+    throw new ApiClientError('NETWORK_UNREACHABLE', getTranslations().toasts.networkUnreachable, 0);
   }
 
   if (!response.ok) {

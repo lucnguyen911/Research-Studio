@@ -43,6 +43,13 @@ import type {
   SystemSettingsDto,
   UpdateSystemSettingsPayload,
 } from '../api/types';
+import {
+  TRANSLATIONS,
+  applyUiLanguageToDom,
+  getActiveLocale,
+  getActiveUiLanguage,
+  getTranslations,
+} from '../i18n/translations';
 import type {
   IdeaItem,
   IdeaPriority,
@@ -50,6 +57,7 @@ import type {
   ManualFormatLabel,
   ProjectItem,
   ThemeMode,
+  UiLanguage,
   UiSimulatorMode,
   VideoItem,
 } from '../prototype/types';
@@ -147,6 +155,7 @@ function formatErrorToast(err: unknown, fallback: string): string {
 }
 
 export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [uiLanguage, setUiLanguageState] = useState<UiLanguage>(() => getActiveUiLanguage());
   const [theme, setThemeState] = useState<ThemeMode>(() => {
     try {
       return localStorage.getItem('rs_theme') === 'dark' ? 'dark' : 'light';
@@ -181,6 +190,15 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
   const [toasts, setToasts] = useState<ToastNotice[]>([]);
   const activeToastsRef = useRef<ToastNotice[]>([]);
   const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    applyUiLanguageToDom(uiLanguage);
+  }, [uiLanguage]);
+
+  const setUiLanguage = useCallback((next: UiLanguage) => {
+    applyUiLanguageToDom(next);
+    setUiLanguageState(next);
+  }, []);
 
   useEffect(() => {
     applyThemeToDom(theme);
@@ -224,7 +242,11 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const pushToast = useCallback(
     (kind: 'success' | 'error', message: string) => {
-      if (kind === 'error' && message === 'Không kết nối được dịch vụ dữ liệu cục bộ.') {
+      if (
+        kind === 'error' &&
+        (message === TRANSLATIONS.vi.toasts.networkUnreachable ||
+          message === TRANSLATIONS.en.toasts.networkUnreachable)
+      ) {
         setBackendOnline(false);
       }
       const duplicate = activeToastsRef.current.find((t) => t.kind === kind && t.message === message);
@@ -253,7 +275,12 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const clearNetworkErrorToasts = useCallback(() => {
     const remaining = activeToastsRef.current.filter(
-      (t) => !(t.kind === 'error' && t.message === 'Không kết nối được dịch vụ dữ liệu cục bộ.'),
+      (t) =>
+        !(
+          t.kind === 'error' &&
+          (t.message === TRANSLATIONS.vi.toasts.networkUnreachable ||
+            t.message === TRANSLATIONS.en.toasts.networkUnreachable)
+        ),
     );
     if (remaining.length !== activeToastsRef.current.length) {
       for (const removed of activeToastsRef.current) {
@@ -290,7 +317,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         applyThemeToDom(settingsRes.themeMode);
         setBackendOnline(true);
         clearNetworkErrorToasts();
-        setLastSyncAt(new Date().toLocaleTimeString('vi-VN'));
+        setLastSyncAt(new Date().toLocaleTimeString(getActiveLocale()));
         setIsBootstrapping(false);
       })
       .catch((err) => {
@@ -331,7 +358,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
       applyThemeToDom(settingsRes.themeMode);
       setBackendOnline(true);
       clearNetworkErrorToasts();
-      setLastSyncAt(new Date().toLocaleTimeString('vi-VN'));
+      setLastSyncAt(new Date().toLocaleTimeString(getActiveLocale()));
       return true;
     } catch (err) {
       if (isAbortError(err)) return false;
@@ -345,7 +372,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
   const refreshWorkspaceStatus = useCallback(async (): Promise<boolean> => {
     const ok = await syncFromBackend();
     if (!ok) {
-      pushToast('error', 'Không kết nối được dịch vụ dữ liệu cục bộ.');
+      pushToast('error', getTranslations().toasts.networkUnreachable);
     }
     return ok;
   }, [pushToast, syncFromBackend]);
@@ -366,7 +393,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
             setBackendOnline(false);
             return;
           }
-          pushToast('error', formatErrorToast(err, 'Không lưu được chủ đề giao diện.'));
+          pushToast('error', formatErrorToast(err, getTranslations().toasts.themeSaveError));
         });
     },
     [clearNetworkErrorToasts, pushToast],
@@ -379,6 +406,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const updateSystemPreferences = useCallback(
     async (patch: UpdateSystemSettingsPayload): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const updated = await updateSystemSettingsApi(patch);
         setSystemSettings(updated);
@@ -387,11 +415,11 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         setBackendOnline(true);
         const quota = await fetchQuotaStatus();
         setQuotaStatus(quota);
-        pushToast('success', 'Đã lưu cài đặt hệ thống xuống SQLite.');
+        pushToast('success', tr.prefsSaved);
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không lưu được cài đặt hệ thống.'));
+          pushToast('error', formatErrorToast(err, tr.prefsSaveError));
         }
         return false;
       }
@@ -401,20 +429,16 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const acceptLegalConsent = useCallback(
     async (accepted: boolean): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const updated = await setLegalConsentApi(accepted);
         setSystemSettings(updated);
         setBackendOnline(true);
-        pushToast(
-          'success',
-          accepted
-            ? 'Đã xác nhận đồng ý Chính sách Quyền riêng tư & Điều khoản YouTube.'
-            : 'Đã thu hồi trạng thái đồng ý Pháp lý.',
-        );
+        pushToast('success', accepted ? tr.legalAccepted : tr.legalRevoked);
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không lưu được xác nhận Pháp lý.'));
+          pushToast('error', formatErrorToast(err, tr.legalSaveError));
         }
         return false;
       }
@@ -424,15 +448,16 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const saveApiKey = useCallback(
     async (rawKey: string): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const updated = await saveYoutubeApiKeyApi(rawKey);
         setSystemSettings(updated);
         setBackendOnline(true);
-        pushToast('success', `Đã mã hóa API Key qua Windows DPAPI (${updated.maskedApiKey ?? 'đã lưu'}).`);
+        pushToast('success', tr.apiKeySaved(updated.maskedApiKey ?? '***'));
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể lưu YouTube API Key.'));
+          pushToast('error', formatErrorToast(err, tr.apiKeySaveError));
         }
         return false;
       }
@@ -441,47 +466,47 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
   );
 
   const removeApiKey = useCallback(async (): Promise<boolean> => {
+    const tr = getTranslations().toasts;
     try {
       const updated = await deleteYoutubeApiKeyApi();
       setSystemSettings(updated);
       setBackendOnline(true);
-      pushToast('success', 'Đã xóa YouTube API Key khỏi DPAPI. Toàn bộ dữ liệu nghiên cứu vẫn nguyên vẹn.');
+      pushToast('success', tr.apiKeyRemoved);
       return true;
     } catch (err) {
       if (!isAbortError(err)) {
-        pushToast('error', formatErrorToast(err, 'Không thể xóa YouTube API Key.'));
+        pushToast('error', formatErrorToast(err, tr.apiKeyRemoveError));
       }
       return false;
     }
   }, [pushToast]);
 
   const reloadIdeas = useCallback(async (signal?: AbortSignal): Promise<void> => {
+    const tr = getTranslations().toasts;
     try {
       const ideasRes = await fetchIdeasApi(undefined, signal);
       setIdeas(ideasRes.map(mapIdeaDtoToItem));
       setBackendOnline(true);
     } catch (err) {
       if (!isAbortError(err)) {
-        pushToast('error', formatErrorToast(err, 'Không thể tải danh sách Ý tưởng từ SQLite.'));
+        pushToast('error', formatErrorToast(err, tr.loadIdeasError));
       }
     }
   }, [pushToast]);
 
   const purgeYoutubeCache = useCallback(async (): Promise<PurgeCacheResultDto | null> => {
+    const tr = getTranslations().toasts;
     try {
       const result = await purgeYoutubeCacheApi();
       setApiCachePurged(true);
       setCachedVideosById({});
       setBackendOnline(true);
       await reloadIdeas();
-      pushToast(
-        'success',
-        `Đã xóa sạch cache YouTube API (xóa ${result.videosDeleted + result.videosTombstoned} video cache, ${result.dbBackupsDeleted} bản sao lưu .db). Dữ liệu của bạn được giữ 100%.`,
-      );
+      pushToast('success', tr.cachePurged(result.videosDeleted + result.videosTombstoned));
       return result;
     } catch (err) {
       if (!isAbortError(err)) {
-        pushToast('error', formatErrorToast(err, 'Không thể xóa cache YouTube API.'));
+        pushToast('error', formatErrorToast(err, tr.cachePurgeError));
       }
       return null;
     }
@@ -495,6 +520,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
       relevanceLanguage: string;
       targetFormat: ProjectItem['targetFormat'];
     }): Promise<ProjectItem | null> => {
+      const tr = getTranslations().toasts;
       try {
         const created = await createProjectApi({
           name: input.name.trim(),
@@ -506,11 +532,11 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         const item = dtoToProjectItem(created);
         setProjects((prev) => [item, ...prev]);
         setBackendOnline(true);
-        pushToast('success', `Đã tạo Project mới: ${item.name}`);
+        pushToast('success', tr.projectCreated(item.name));
         return item;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể tạo Project mới.'));
+          pushToast('error', formatErrorToast(err, tr.projectCreateError));
         }
         return null;
       }
@@ -520,6 +546,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const updateProject = useCallback(
     async (projectId: string, patch: Partial<ProjectItem>): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const updatedDto = await updateProjectApi(projectId, {
           name: patch.name,
@@ -531,11 +558,11 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         const updated = dtoToProjectItem(updatedDto);
         setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
         setBackendOnline(true);
-        pushToast('success', `Đã lưu cấu hình Project "${updated.name}".`);
+        pushToast('success', tr.projectUpdated(updated.name));
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể cập nhật cài đặt Project.'));
+          pushToast('error', formatErrorToast(err, tr.projectUpdateError));
         }
         return false;
       }
@@ -545,6 +572,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const updateProjectRssFeeds = useCallback(
     async (projectId: string, feedIds: string[]): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const updatedDto = await updateProjectRssFeedsApi(projectId, feedIds);
         const updated = dtoToProjectItem(updatedDto);
@@ -553,7 +581,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể lưu liên kết RSS cho Project.'));
+          pushToast('error', formatErrorToast(err, tr.projectFeedsError));
         }
         return false;
       }
@@ -563,13 +591,14 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const exportProjectJson = useCallback(
     async (projectId: string, fallbackName: string): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const filename = await exportProjectJsonApi(projectId, fallbackName);
-        pushToast('success', `Đã xuất tệp JSON sạch (0 API Key): ${filename}`);
+        pushToast('success', tr.projectExported(filename));
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể xuất tệp JSON Project.'));
+          pushToast('error', formatErrorToast(err, tr.projectExportError));
         }
         return false;
       }
@@ -579,6 +608,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const deleteProject = useCallback(
     async (projectId: string, confirmName: string): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const result = await deleteProjectApi(projectId, confirmName);
         setProjects((prev) => prev.filter((p) => p.id !== projectId));
@@ -589,14 +619,11 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         });
         setBackendOnline(true);
         await reloadIdeas();
-        pushToast(
-          'success',
-          `Đã xóa Project "${result.deletedProjectName}" (đã sao lưu ${result.recoveryBackupFilename} và giữ 100% dữ liệu dùng chung).`,
-        );
+        pushToast('success', tr.projectDeleted(result.deletedProjectName, result.recoveryBackupFilename));
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể xóa Project.'));
+          pushToast('error', formatErrorToast(err, tr.projectDeleteError));
         }
         return false;
       }
@@ -634,6 +661,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const setManualFormat = useCallback(
     async (videoId: string, label: ManualFormatLabel): Promise<boolean> => {
+      const tr = getTranslations();
       const payload = label === 'none' ? null : label;
       try {
         await setManualVideoFormatApi(videoId, payload);
@@ -654,13 +682,13 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         pushToast(
           'success',
           label === 'none'
-            ? 'Đã xóa nhãn thủ công (giữ nguyên xác minh từ nguồn YouTube API).'
-            : `Đã lưu nhãn thủ công vào SQLite: ${label === 'long_form' ? 'Video dài' : 'Shorts'}`,
+            ? tr.toasts.manualFormatCleared
+            : tr.toasts.manualFormatSaved(label === 'long_form' ? tr.formatBadge.longForm : tr.formatBadge.shorts),
         );
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể cập nhật nhãn định dạng thủ công.'));
+          pushToast('error', formatErrorToast(err, tr.toasts.manualFormatError));
         }
         return false;
       }
@@ -677,15 +705,16 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const addRssFeed = useCallback(
     async (url: string, name: string, groupTag = ''): Promise<RssFeedDto | null> => {
+      const tr = getTranslations().toasts;
       try {
         const created = await createRssFeedApi({ name: name.trim(), url: url.trim(), groupTag });
         setRssFeedDtos((prev) => [created, ...prev]);
         setBackendOnline(true);
-        pushToast('success', `Đã thêm nguồn RSS "${created.name}" (0 quota YouTube).`);
+        pushToast('success', tr.rssAdded(created.name));
         return created;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể thêm nguồn RSS.'));
+          pushToast('error', formatErrorToast(err, tr.rssAddError));
         }
         return null;
       }
@@ -695,16 +724,17 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const toggleRssFeedEnabled = useCallback(
     async (feedId: string, nextEnabled?: boolean): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       const target = rssFeedDtos.find((f) => f.id === feedId);
       const desired = nextEnabled !== undefined ? nextEnabled : !(target?.enabled ?? true);
       try {
         const updated = await updateRssFeedApi(feedId, { enabled: desired });
         setRssFeedDtos((prev) => prev.map((f) => (f.id === feedId ? updated : f)));
-        pushToast('success', desired ? `Đã bật lại nguồn "${updated.name}".` : `Đã tạm tắt nguồn "${updated.name}".`);
+        pushToast('success', desired ? tr.rssEnabled(updated.name) : tr.rssDisabled(updated.name));
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể thay đổi trạng thái nguồn RSS.'));
+          pushToast('error', formatErrorToast(err, tr.rssToggleError));
         }
         return false;
       }
@@ -714,21 +744,19 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const retryRssFeed = useCallback(
     async (feedId: string, signal?: AbortSignal): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const res = await refreshSingleRssFeedApi(feedId, signal);
         setRssFeedDtos((prev) => prev.map((f) => (f.id === feedId ? res.feed : f)));
         if (res.status === 'ok') {
-          pushToast(
-            'success',
-            `Nguồn "${res.feed.name}" đã nạp ${res.insertedCount ?? 0} bài mới (0 quota YouTube).`,
-          );
+          pushToast('success', tr.rssRefreshedOne(res.feed.name, res.insertedCount ?? 0));
           return true;
         }
-        pushToast('error', `Nguồn "${res.feed.name}" gặp lỗi cô lập: ${res.errorMessage ?? res.errorCode ?? 'Lỗi tải RSS'}`);
+        pushToast('error', tr.rssFeedError(res.feed.name, res.errorMessage ?? res.errorCode ?? 'RSS error'));
         return false;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể làm mới nguồn RSS.'));
+          pushToast('error', formatErrorToast(err, tr.rssRefreshOneError));
         }
         return false;
       }
@@ -738,17 +766,18 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const deleteRssFeed = useCallback(
     async (feedId: string): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         await deleteRssFeedApi(feedId);
         setRssFeedDtos((prev) => prev.filter((f) => f.id !== feedId));
         setProjects((prev) =>
           prev.map((p) => ({ ...p, linkedFeedIds: p.linkedFeedIds.filter((fid) => fid !== feedId) })),
         );
-        pushToast('success', 'Đã xóa nguồn RSS khỏi danh sách.');
+        pushToast('success', tr.rssDeleted);
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể xóa nguồn RSS.'));
+          pushToast('error', formatErrorToast(err, tr.rssDeleteError));
         }
         return false;
       }
@@ -758,21 +787,19 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const refreshAllRssFeeds = useCallback(
     async (signal?: AbortSignal): Promise<RssRefreshAllResultDto | null> => {
+      const tr = getTranslations().toasts;
       try {
         const summary = await refreshAllRssFeedsApi(signal);
         await reloadRssFeeds(signal);
         if (summary.errorCount > 0) {
-          pushToast(
-            'error',
-            `Đã làm mới ${summary.okCount}/${summary.refreshedCount} nguồn RSS (${summary.errorCount} nguồn lỗi đã được cô lập riêng).`,
-          );
+          pushToast('error', tr.rssRefreshedPartial(summary.okCount, summary.refreshedCount, summary.errorCount));
         } else {
-          pushToast('success', `Đã làm mới xong ${summary.okCount} nguồn RSS đang bật (0 quota YouTube).`);
+          pushToast('success', tr.rssRefreshedAll(summary.okCount));
         }
         return summary;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể làm mới danh sách nguồn RSS.'));
+          pushToast('error', formatErrorToast(err, tr.rssRefreshAllError));
         }
         return null;
       }
@@ -803,6 +830,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const toggleBreakoutFlag = useCallback(
     async (projectId: string, videoId: string): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       const existing = breakoutByProject[projectId]?.[videoId] ?? { flagged: false, note: '' };
       const desired = !existing.flagged;
       try {
@@ -814,14 +842,11 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
             [videoId]: { flagged: res.flagged, note: res.notes },
           },
         }));
-        pushToast(
-          'success',
-          res.flagged ? 'Đã gắn cờ Đánh dấu Bứt phá thủ công.' : 'Đã bỏ cờ Đánh dấu Bứt phá.',
-        );
+        pushToast('success', res.flagged ? tr.breakoutFlagged : tr.breakoutUnflagged);
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể cập nhật cờ Đánh dấu Bứt phá.'));
+          pushToast('error', formatErrorToast(err, tr.breakoutError));
         }
         return false;
       }
@@ -831,6 +856,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const setBreakoutNote = useCallback(
     async (projectId: string, videoId: string, note: string, flagged?: boolean): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const res = await updateVideoBreakoutApi(projectId, videoId, {
           notes: note,
@@ -843,11 +869,11 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
             [videoId]: { flagged: res.flagged, note: res.notes },
           },
         }));
-        pushToast('success', 'Đã lưu ghi chú phân tích video vào SQLite.');
+        pushToast('success', tr.noteSaved);
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể lưu ghi chú phân tích.'));
+          pushToast('error', formatErrorToast(err, tr.noteSaveError));
         }
         return false;
       }
@@ -857,6 +883,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const addChannelToProject = useCallback(
     async (projectId: string, identifier: string, notes = ''): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       const cleaned = identifier.trim();
       if (!cleaned) return false;
       try {
@@ -868,17 +895,12 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
           await syncQuotaStatus();
         }
         setBackendOnline(true);
-        pushToast(
-          'success',
-          res.reusedCache
-            ? 'Đã gắn kênh đối thủ từ bộ nhớ đệm dùng chung (0 quota API).'
-            : `Đã thêm kênh đối thủ và nạp ${res.videos.length} video (0 lượt Search Queries).`,
-        );
+        pushToast('success', res.reusedCache ? tr.competitorReused : tr.competitorAdded(res.videos.length));
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
           void syncQuotaStatus();
-          pushToast('error', formatErrorToast(err, 'Không thể thêm kênh đối thủ vào Project.'));
+          pushToast('error', formatErrorToast(err, tr.competitorAddError));
         }
         return false;
       }
@@ -888,16 +910,17 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const addKeyword = useCallback(
     async (projectId: string, keyword: string, priority: IdeaPriority, notes = ''): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       const trimmed = keyword.trim();
       if (!trimmed) return false;
       try {
         const created = await createProjectKeywordApi(projectId, { keyword: trimmed, priority, notes });
         setBackendOnline(true);
-        pushToast('success', `Đã lưu từ khóa "${created.keyword}" vào Project (0 quota).`);
+        pushToast('success', tr.keywordSaved(created.keyword));
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể lưu từ khóa vào Project.'));
+          pushToast('error', formatErrorToast(err, tr.keywordSaveError));
         }
         return false;
       }
@@ -907,6 +930,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const saveIdea: PrototypeWorkspaceContextValue['saveIdea'] = useCallback(
     async (input): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const created = await createIdeaApi({
           title: input.title.trim(),
@@ -924,11 +948,11 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         const mapped = mapIdeaDtoToItem(created);
         setIdeas((prev) => [mapped, ...prev.filter((i) => i.id !== mapped.id)]);
         setBackendOnline(true);
-        pushToast('success', 'Đã lưu Ý tưởng vĩnh viễn vào SQLite.');
+        pushToast('success', tr.ideaSaved);
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể lưu Ý tưởng.'));
+          pushToast('error', formatErrorToast(err, tr.ideaSaveError));
         }
         return false;
       }
@@ -938,16 +962,17 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const updateIdeaCore: PrototypeWorkspaceContextValue['updateIdeaCore'] = useCallback(
     async (ideaId, patch): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const updated = await updateIdeaCoreApi(ideaId, patch);
         const mapped = mapIdeaDtoToItem(updated);
         setIdeas((prev) => prev.map((i) => (i.id === ideaId ? mapped : i)));
         setBackendOnline(true);
-        pushToast('success', 'Đã cập nhật nội dung gốc Ý tưởng trong SQLite.');
+        pushToast('success', tr.ideaCoreUpdated);
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể cập nhật nội dung Ý tưởng.'));
+          pushToast('error', formatErrorToast(err, tr.ideaCoreUpdateError));
         }
         return false;
       }
@@ -957,16 +982,17 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const updateProjectIdeaStatus = useCallback(
     async (ideaId: string, projectId: string, status: IdeaStatus): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const updated = await upsertProjectIdeaLinkApi(ideaId, projectId, { status });
         const mapped = mapIdeaDtoToItem(updated);
         setIdeas((prev) => prev.map((i) => (i.id === ideaId ? mapped : i)));
         setBackendOnline(true);
-        pushToast('success', 'Đã cập nhật trạng thái sản xuất của Ý tưởng.');
+        pushToast('success', tr.ideaStatusUpdated);
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể cập nhật trạng thái Ý tưởng.'));
+          pushToast('error', formatErrorToast(err, tr.ideaStatusUpdateError));
         }
         return false;
       }
@@ -983,6 +1009,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
       publishedVideoUrl: string,
       priority?: IdeaPriority,
     ): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const updated = await upsertProjectIdeaLinkApi(ideaId, projectId, {
           projectAngle: angle,
@@ -993,11 +1020,11 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         const mapped = mapIdeaDtoToItem(updated);
         setIdeas((prev) => prev.map((i) => (i.id === ideaId ? mapped : i)));
         setBackendOnline(true);
-        pushToast('success', 'Đã lưu góc khai thác & liên kết video cho Project.');
+        pushToast('success', tr.ideaAngleSaved);
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể lưu thay đổi cho Project này.'));
+          pushToast('error', formatErrorToast(err, tr.ideaAngleSaveError));
         }
         return false;
       }
@@ -1012,6 +1039,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
       projectAngle: string,
       priority: IdeaPriority = 'medium',
     ): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const updated = await upsertProjectIdeaLinkApi(ideaId, projectId, {
           status: 'new',
@@ -1021,11 +1049,11 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         const mapped = mapIdeaDtoToItem(updated);
         setIdeas((prev) => prev.map((i) => (i.id === ideaId ? mapped : i)));
         setBackendOnline(true);
-        pushToast('success', 'Đã gắn Ý tưởng vào Project (không tạo bản sao gốc).');
+        pushToast('success', tr.ideaAttached);
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể gắn Ý tưởng vào Project.'));
+          pushToast('error', formatErrorToast(err, tr.ideaAttachError));
         }
         return false;
       }
@@ -1035,16 +1063,17 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const detachIdeaFromProject = useCallback(
     async (ideaId: string, projectId: string): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         const updated = await detachIdeaFromProjectApi(ideaId, projectId);
         const mapped = mapIdeaDtoToItem(updated);
         setIdeas((prev) => prev.map((i) => (i.id === ideaId ? mapped : i)));
         setBackendOnline(true);
-        pushToast('success', 'Đã gỡ liên kết Ý tưởng khỏi Project này (bản gốc vẫn an toàn).');
+        pushToast('success', tr.ideaDetached);
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể gỡ Ý tưởng khỏi Project.'));
+          pushToast('error', formatErrorToast(err, tr.ideaDetachError));
         }
         return false;
       }
@@ -1054,15 +1083,16 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
 
   const deleteIdea = useCallback(
     async (ideaId: string): Promise<boolean> => {
+      const tr = getTranslations().toasts;
       try {
         await deleteIdeaApi(ideaId);
         setIdeas((prev) => prev.filter((i) => i.id !== ideaId));
         setBackendOnline(true);
-        pushToast('success', 'Đã xóa vĩnh viễn Ý tưởng gốc.');
+        pushToast('success', tr.ideaDeleted);
         return true;
       } catch (err) {
         if (!isAbortError(err)) {
-          pushToast('error', formatErrorToast(err, 'Không thể xóa Ý tưởng.'));
+          pushToast('error', formatErrorToast(err, tr.ideaDeleteError));
         }
         return false;
       }
@@ -1083,6 +1113,8 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
   return (
     <PrototypeWorkspaceContext.Provider
       value={{
+        uiLanguage,
+        setUiLanguage,
         theme,
         toggleTheme,
         setTheme,

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getTranslations } from '../i18n/translations';
 import { formatInt, formatSnapshotDeltaLabel } from '../prototype/demoData';
 import type { IdeaPriority, ProjectItem } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
@@ -7,8 +8,10 @@ import { FormatBadgeGroup } from './FormatBadgeGroup';
 import { SparklineCell } from './SparklineCell';
 
 export const CreateProjectModal: React.FC = () => {
-  const { createProjectModalOpen, setCreateProjectModalOpen, createProject, systemSettings } =
+  const { uiLanguage, createProjectModalOpen, setCreateProjectModalOpen, createProject, systemSettings } =
     usePrototypeWorkspace();
+  const t = getTranslations(uiLanguage);
+  const m = t.modals;
   const { switchProject } = useAppNavigation();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -26,7 +29,7 @@ export const CreateProjectModal: React.FC = () => {
       <div className="rs-modal">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 id="create-proj-title" style={{ margin: 0, fontSize: '17px' }}>
-            Tạo Project mới
+            {m.createProjectTitle}
           </h2>
           <button
             type="button"
@@ -34,26 +37,26 @@ export const CreateProjectModal: React.FC = () => {
             disabled={submitting}
             onClick={() => setCreateProjectModalOpen(false)}
           >
-            Đóng
+            {t.common.close}
           </button>
         </div>
 
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontWeight: 600 }}>Tên Project / Kênh *</span>
+          <span style={{ fontWeight: 600 }}>{m.projectNameLabel}</span>
           <input
             type="text"
             className="rs-input"
-            placeholder="Ví dụ: Kênh Review Công cụ AI"
+            placeholder={m.projectNamePlaceholder}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
         </label>
 
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontWeight: 600 }}>Mô tả định hướng kênh</span>
+          <span style={{ fontWeight: 600 }}>{m.projectDescLabel}</span>
           <textarea
             className="rs-textarea"
-            placeholder="Mục tiêu chủ đề, nhóm khán giả, định dạng chính..."
+            placeholder={m.projectDescPlaceholder}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
@@ -61,30 +64,32 @@ export const CreateProjectModal: React.FC = () => {
 
         <div className="rs-grid-3">
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontWeight: 600 }}>Thị trường</span>
+            <span style={{ fontWeight: 600 }}>{m.regionLabel}</span>
             <select className="rs-select" value={regionCode} onChange={(e) => setRegionCode(e.target.value)}>
-              <option value="VN">VN — Việt Nam</option>
-              <option value="US">US — Hoa Kỳ</option>
-              <option value="JP">JP — Nhật Bản</option>
+              {t.trends.regions.slice(0, 3).map((r) => (
+                <option key={r.code} value={r.code}>
+                  {r.label}
+                </option>
+              ))}
             </select>
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontWeight: 600 }}>Ngôn ngữ</span>
+            <span style={{ fontWeight: 600 }}>{m.languageLabel}</span>
             <select className="rs-select" value={relevanceLanguage} onChange={(e) => setRelevanceLanguage(e.target.value)}>
-              <option value="vi">vi — Tiếng Việt</option>
-              <option value="en">en — English</option>
+              <option value="vi">{m.langViOption}</option>
+              <option value="en">{m.langEnOption}</option>
             </select>
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontWeight: 600 }}>Định dạng trọng tâm</span>
+            <span style={{ fontWeight: 600 }}>{m.targetFormatLabel}</span>
             <select
               className="rs-select"
               value={targetFormat}
               onChange={(e) => setTargetFormat(e.target.value as ProjectItem['targetFormat'])}
             >
-              <option value="all">Tất cả</option>
-              <option value="long_form">Video dài</option>
-              <option value="shorts">Shorts</option>
+              <option value="all">{m.formatAll}</option>
+              <option value="long_form">{m.formatLong}</option>
+              <option value="shorts">{m.formatShorts}</option>
             </select>
           </label>
         </div>
@@ -96,7 +101,7 @@ export const CreateProjectModal: React.FC = () => {
             disabled={submitting}
             onClick={() => setCreateProjectModalOpen(false)}
           >
-            Hủy
+            {t.common.cancel}
           </button>
           <button
             type="button"
@@ -125,7 +130,7 @@ export const CreateProjectModal: React.FC = () => {
               })();
             }}
           >
-            {submitting ? 'Đang lưu...' : 'Tạo Project & Chuyển sang Project này'}
+            {submitting ? t.common.saving : m.createProjectSubmit}
           </button>
         </div>
       </div>
@@ -138,7 +143,9 @@ const SaveIdeaModalBody: React.FC<{
   onClose: () => void;
 }> = ({ draft, onClose }) => {
   const { currentEntry } = useAppNavigation();
-  const { projects, saveIdea } = usePrototypeWorkspace();
+  const { uiLanguage, projects, saveIdea } = usePrototypeWorkspace();
+  const t = getTranslations(uiLanguage);
+  const m = t.modals;
   const [title, setTitle] = useState(draft.title);
   const [notes, setNotes] = useState('');
   const [projectAngle, setProjectAngle] = useState('');
@@ -158,35 +165,33 @@ const SaveIdeaModalBody: React.FC<{
       <div className="rs-modal">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 id="save-idea-title" style={{ margin: 0, fontSize: '17px' }}>
-            Lưu thành Ý tưởng (User-Created Data)
+            {m.saveIdeaTitle}
           </h2>
           <button type="button" className="rs-btn rs-btn-ghost rs-btn-sm" onClick={onClose} disabled={saving}>
-            Đóng
+            {t.common.close}
           </button>
         </div>
 
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontWeight: 600 }}>Tiêu đề Ý tưởng *</span>
+          <span style={{ fontWeight: 600 }}>{m.ideaTitleLabel}</span>
           <input type="text" className="rs-input" value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
 
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontWeight: 600 }}>Ghi chú gốc (Kho chung)</span>
+          <span style={{ fontWeight: 600 }}>{m.ideaNotesLabel}</span>
           <textarea
             className="rs-textarea"
-            placeholder="Điểm hay học được, bố cục mở đầu 30 giây đầu..."
+            placeholder={m.ideaNotesPlaceholder}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
         </label>
 
         <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Gắn vào Project (không nhân bản bản gốc)</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{m.attachProjectLabel}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {projects.length === 0 ? (
-              <span style={{ color: 'var(--rs-text-muted)', fontSize: '13px' }}>
-                Chưa có Project nào — sẽ lưu vào Kho ý tưởng chung.
-              </span>
+              <span style={{ color: 'var(--rs-text-muted)', fontSize: '13px' }}>{m.noProjectsHint}</span>
             ) : (
               projects.map((p) => (
                 <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
@@ -205,25 +210,25 @@ const SaveIdeaModalBody: React.FC<{
         {selectedProjectIds.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontWeight: 600 }}>Góc khai thác cho Project đã chọn</span>
+              <span style={{ fontWeight: 600 }}>{m.projectAngleLabel}</span>
               <input
                 type="text"
                 className="rs-input"
-                placeholder="Ví dụ: Bóc tách case study cho khán giả Việt Nam"
+                placeholder={m.projectAnglePlaceholder}
                 value={projectAngle}
                 onChange={(e) => setProjectAngle(e.target.value)}
               />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontWeight: 600 }}>Mức ưu tiên triển khai</span>
+              <span style={{ fontWeight: 600 }}>{m.priorityLabel}</span>
               <select
                 className="rs-select"
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as IdeaPriority)}
               >
-                <option value="high">Cao (Ưu tiên làm trước)</option>
-                <option value="medium">Trung bình</option>
-                <option value="low">Thấp (Làm sau)</option>
+                <option value="high">{m.priorityHigh}</option>
+                <option value="medium">{m.priorityMedium}</option>
+                <option value="low">{m.priorityLow}</option>
               </select>
             </label>
           </div>
@@ -231,12 +236,12 @@ const SaveIdeaModalBody: React.FC<{
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
           <input type="checkbox" checked={inGlobalVault} onChange={(e) => setInGlobalVault(e.target.checked)} />
-          <span>Hiển thị trong Kho ý tưởng chung (Global Vault)</span>
+          <span>{m.showInGlobalVault}</span>
         </label>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button type="button" className="rs-btn rs-btn-secondary" onClick={onClose} disabled={saving}>
-            Hủy
+            {t.common.cancel}
           </button>
           <button
             type="button"
@@ -262,7 +267,7 @@ const SaveIdeaModalBody: React.FC<{
               });
             }}
           >
-            {saving ? 'Đang lưu...' : 'Lưu Ý tưởng vĩnh viễn'}
+            {saving ? t.common.saving : m.saveIdeaSubmit}
           </button>
         </div>
       </div>
@@ -291,6 +296,9 @@ export const ConfirmDeleteModal: React.FC<{
   onCancel: () => void;
   onConfirm: () => void;
 }> = ({ open, title, warningText, requireExactText, confirmLabel, onCancel, onConfirm }) => {
+  const { uiLanguage } = usePrototypeWorkspace();
+  const t = getTranslations(uiLanguage);
+  const m = t.modals;
   const [typed, setTyped] = useState('');
   if (!open) return null;
 
@@ -306,7 +314,7 @@ export const ConfirmDeleteModal: React.FC<{
         {requireExactText && (
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: '13px', fontWeight: 600 }}>
-              Nhập chính xác <code>{requireExactText}</code> để mở khóa nút xóa:
+              {m.typeToConfirmPrefix} <code>{requireExactText}</code> {m.typeToConfirmSuffix}
             </span>
             <input
               type="text"
@@ -319,7 +327,7 @@ export const ConfirmDeleteModal: React.FC<{
         )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button type="button" className="rs-btn rs-btn-secondary" onClick={onCancel}>
-            Hủy bỏ
+            {t.common.cancel}
           </button>
           <button
             type="button"
@@ -339,7 +347,10 @@ export const ConfirmDeleteModal: React.FC<{
 };
 
 export const LegalConsentModal: React.FC = () => {
-  const { legalModalOpen, setLegalModalOpen, acceptLegalConsent, systemSettings } = usePrototypeWorkspace();
+  const { uiLanguage, legalModalOpen, setLegalModalOpen, acceptLegalConsent, systemSettings } =
+    usePrototypeWorkspace();
+  const t = getTranslations(uiLanguage);
+  const m = t.modals;
   const [submitting, setSubmitting] = useState(false);
   if (!legalModalOpen) return null;
 
@@ -347,31 +358,33 @@ export const LegalConsentModal: React.FC = () => {
     <div className="rs-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="legal-modal-title">
       <div className="rs-modal">
         <h2 id="legal-modal-title" style={{ margin: 0, fontSize: '17px' }}>
-          Chính sách Quyền riêng tư &amp; Điều khoản YouTube API Services
+          {m.legalTitle}
         </h2>
         <div style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <p style={{ margin: 0 }}>
-            Research Studio sử dụng <strong>YouTube API Services</strong> bằng khóa API cá nhân của chính bạn để tra cứu
-            dữ liệu công khai trên máy Windows 11 cục bộ.
+            {m.legalIntroBeforeStrong}
+            <strong>{m.legalIntroStrong}</strong>
+            {m.legalIntroAfterStrong}
           </p>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             <li>
-              Sử dụng tính năng YouTube đồng nghĩa bạn đồng ý chịu sự ràng buộc của{' '}
+              {m.legalBullet1Before}
               <a href={systemSettings.legalLinks.youtubeTosUrl} target="_blank" rel="noopener noreferrer">
-                YouTube Terms of Service
+                {m.legalTosLinkText}
               </a>
               .
             </li>
             <li>
-              Xem thêm{' '}
+              {m.legalBullet2Before}
               <a href={systemSettings.legalLinks.googlePrivacyUrl} target="_blank" rel="noopener noreferrer">
-                Google Privacy Policy
+                {m.legalPrivacyLinkText}
               </a>
               .
             </li>
             <li>
-              Dữ liệu YouTube API lưu cục bộ tối đa <strong>30 ngày lịch</strong>, 0% Telemetry, không gửi dữ liệu nghiên
-              cứu lên cloud bên thứ ba.
+              {m.legalBullet3BeforeStrong}
+              <strong>{m.legalBullet3Strong}</strong>
+              {m.legalBullet3AfterStrong}
             </li>
           </ul>
         </div>
@@ -382,7 +395,7 @@ export const LegalConsentModal: React.FC = () => {
             disabled={submitting}
             onClick={() => setLegalModalOpen(false)}
           >
-            Đóng
+            {t.common.close}
           </button>
           <button
             type="button"
@@ -402,7 +415,7 @@ export const LegalConsentModal: React.FC = () => {
               })();
             }}
           >
-            {submitting ? 'Đang lưu...' : 'Tôi đã đọc & Đồng ý'}
+            {submitting ? t.common.saving : m.legalAcceptBtn}
           </button>
         </div>
       </div>
@@ -411,53 +424,56 @@ export const LegalConsentModal: React.FC = () => {
 };
 
 export const VideoInspectorDrawer: React.FC = () => {
-  const { inspectorVideoId, openInspectorVideo, openSaveIdeaModal, cachedVideosById } = usePrototypeWorkspace();
+  const { uiLanguage, inspectorVideoId, openInspectorVideo, openSaveIdeaModal, cachedVideosById } =
+    usePrototypeWorkspace();
   const { navigate } = useAppNavigation();
+  const t = getTranslations(uiLanguage);
+  const m = t.modals;
   if (!inspectorVideoId) return null;
 
   const video = cachedVideosById[inspectorVideoId];
   if (!video) {
     return (
-      <aside className="rs-drawer" aria-label="Xem nhanh video">
+      <aside className="rs-drawer" aria-label={m.quickViewAria}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <strong>Xem nhanh video</strong>
+          <strong>{m.quickViewTitle}</strong>
           <button type="button" className="rs-btn rs-btn-ghost rs-btn-sm" onClick={() => openInspectorVideo(null)}>
-            Đóng ×
+            {m.quickViewClose}
           </button>
         </div>
         <div className="rs-card" style={{ fontSize: '13.5px', color: 'var(--rs-text-secondary)' }}>
-          Không còn dữ liệu video trong phiên hiện tại. Bạn có thể mở trang chi tiết từ danh sách nguồn.
+          {m.quickViewMissing}
         </div>
       </aside>
     );
   }
 
   return (
-    <aside className="rs-drawer" aria-label="Xem nhanh video">
+    <aside className="rs-drawer" aria-label={m.quickViewAria}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <strong>Xem nhanh video</strong>
+        <strong>{m.quickViewTitle}</strong>
         <button type="button" className="rs-btn rs-btn-ghost rs-btn-sm" onClick={() => openInspectorVideo(null)}>
-          Đóng ×
+          {m.quickViewClose}
         </button>
       </div>
       <div className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ fontWeight: 700, lineHeight: 1.35 }}>{video.title}</div>
         <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>
-          {video.channelTitle} · Đăng {video.publishedAt} · {video.durationDisplay}
+          {video.channelTitle} · {m.quickViewPublished} {video.publishedAt} · {video.durationDisplay}
         </div>
         <div className="rs-tabular" style={{ display: 'flex', gap: 12, fontSize: '13px', color: 'var(--rs-text-secondary)' }}>
-          <span>{formatInt(video.viewCount)} lượt xem</span>
-          <span>{formatInt(video.likeCount)} thích</span>
-          <span>{formatInt(video.commentCount)} bình luận</span>
+          <span>{m.quickViewViews(formatInt(video.viewCount))}</span>
+          <span>{m.quickViewLikes(formatInt(video.likeCount))}</span>
+          <span>{m.quickViewComments(formatInt(video.commentCount))}</span>
         </div>
         <FormatBadgeGroup video={video} compact />
         <SparklineCell
           points={video.snapshots30d.map((s) => s.viewCount)}
           labels={video.snapshots30d.map((s) => s.capturedAt)}
-          badgeLabel="Lịch sử lượt xem"
+          badgeLabel={t.videoTable.historyTitle}
           directionLabel={formatSnapshotDeltaLabel(video.snapshots30d)}
-          tooltipTitle="Lịch sử lượt xem"
-          tooltipDetail="Số liệu lượt xem theo các lần thu thập gần đây."
+          tooltipTitle={t.videoTable.historyTitle}
+          tooltipDetail={t.videoTable.historyDetail}
         />
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -475,14 +491,14 @@ export const VideoInspectorDrawer: React.FC = () => {
             })
           }
         >
-          + Ý tưởng
+          {t.videoTable.addIdeaBtn}
         </button>
         <button
           type="button"
           className="rs-btn rs-btn-secondary rs-btn-sm"
           onClick={() => navigate('video-detail', { params: { videoId: video.id, fromChannelId: video.channelId } })}
         >
-          Chi tiết →
+          {m.quickViewDetailBtn}
         </button>
         <a
           href={`https://www.youtube.com/watch?v=${encodeURIComponent(video.id)}`}

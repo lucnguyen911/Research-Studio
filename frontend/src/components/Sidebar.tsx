@@ -1,28 +1,29 @@
 import React from 'react';
+import { getTranslations } from '../i18n/translations';
 import type { GlobalScreenId, ProjectScreenId, ScreenId } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
 import { usePrototypeWorkspace } from '../state/workspaceContext';
 
-const GLOBAL_MENU: Array<{ id: GlobalScreenId; label: string; stage2?: boolean }> = [
-  { id: 'global-overview', label: 'Tổng quan' },
-  { id: 'global-trends', label: 'Khám phá xu hướng' },
-  { id: 'global-search', label: 'Nghiên cứu tự do' },
-  { id: 'global-featured-stage2', label: 'Video nổi bật', stage2: true },
-  { id: 'global-news', label: 'Tin tức & thảo luận' },
-  { id: 'global-ideas', label: 'Kho ý tưởng chung' },
+const GLOBAL_MENU: Array<{ id: GlobalScreenId; stage2?: boolean }> = [
+  { id: 'global-overview' },
+  { id: 'global-trends' },
+  { id: 'global-search' },
+  { id: 'global-featured-stage2', stage2: true },
+  { id: 'global-news' },
+  { id: 'global-ideas' },
 ];
 
-const PROJECT_MENU: Array<{ id: ProjectScreenId; label: string; stage2?: boolean }> = [
-  { id: 'project-overview', label: 'Tổng quan dự án' },
-  { id: 'project-hot-topics-stage2', label: 'Chủ đề nóng', stage2: true },
-  { id: 'project-keywords', label: 'Nghiên cứu từ khóa' },
-  { id: 'project-breakout', label: 'Video bứt phá' },
-  { id: 'project-competitors', label: 'Theo dõi đối thủ' },
-  { id: 'project-evergreen-stage2', label: 'Chủ đề dài hạn', stage2: true },
-  { id: 'project-opportunities-stage2', label: 'Cơ hội nội dung', stage2: true },
-  { id: 'project-ai-stage2', label: 'Nghiên cứu AI', stage2: true },
-  { id: 'project-ideas', label: 'Quản lý ý tưởng' },
-  { id: 'project-settings', label: 'Cài đặt dự án' },
+const PROJECT_MENU: Array<{ id: ProjectScreenId; stage2?: boolean }> = [
+  { id: 'project-overview' },
+  { id: 'project-hot-topics-stage2', stage2: true },
+  { id: 'project-keywords' },
+  { id: 'project-breakout' },
+  { id: 'project-competitors' },
+  { id: 'project-evergreen-stage2', stage2: true },
+  { id: 'project-opportunities-stage2', stage2: true },
+  { id: 'project-ai-stage2', stage2: true },
+  { id: 'project-ideas' },
+  { id: 'project-settings' },
 ];
 
 type NavIconId = ScreenId | 'collapse-left' | 'collapse-right' | 'plus';
@@ -192,27 +193,54 @@ const SidebarIcon: React.FC<{ id: NavIconId; size?: number }> = ({ id, size = 16
 
 export const Sidebar: React.FC = () => {
   const { currentEntry, navigate, switchProject } = useAppNavigation();
-  const { projects, sidebarCollapsed, toggleSidebar, setCreateProjectModalOpen } = usePrototypeWorkspace();
+  const { uiLanguage, projects, sidebarCollapsed, toggleSidebar, setCreateProjectModalOpen } =
+    usePrototypeWorkspace();
+  const t = getTranslations(uiLanguage).sidebar;
 
   const activeProjectId = currentEntry.projectId ?? projects[0]?.id ?? '';
 
-  const renderNavBtn = (item: { id: ScreenId; label: string; stage2?: boolean }) => {
+  const renderGlobalBtn = (item: { id: GlobalScreenId; stage2?: boolean }) => {
+    const label = t.globalMenu[item.id];
     const isActive = currentEntry.screenId === item.id;
     return (
       <button
         key={item.id}
         type="button"
         onClick={() => navigate(item.id)}
-        title={sidebarCollapsed ? `${item.label}${item.stage2 ? ' — Giai đoạn 2' : ''}` : undefined}
+        title={sidebarCollapsed ? `${label}${item.stage2 ? ` — ${t.stage2Title}` : ''}` : undefined}
         className={`rs-nav-item ${isActive ? 'is-active' : ''} ${item.stage2 ? 'is-stage2' : ''}`}
       >
         <span className="rs-nav-icon">
           <SidebarIcon id={item.id} />
         </span>
-        {!sidebarCollapsed && <span className="rs-nav-label">{item.label}</span>}
+        {!sidebarCollapsed && <span className="rs-nav-label">{label}</span>}
         {!sidebarCollapsed && item.stage2 && (
-          <span className="rs-tag-stage2" title="Tính năng thuộc Giai đoạn 2">
-            GĐ 2
+          <span className="rs-tag-stage2" title={t.stage2Title}>
+            {t.stage2Tag}
+          </span>
+        )}
+      </button>
+    );
+  };
+
+  const renderProjectBtn = (item: { id: ProjectScreenId; stage2?: boolean }) => {
+    const label = t.projectMenu[item.id];
+    const isActive = currentEntry.screenId === item.id;
+    return (
+      <button
+        key={item.id}
+        type="button"
+        onClick={() => navigate(item.id)}
+        title={sidebarCollapsed ? `${label}${item.stage2 ? ` — ${t.stage2Title}` : ''}` : undefined}
+        className={`rs-nav-item ${isActive ? 'is-active' : ''} ${item.stage2 ? 'is-stage2' : ''}`}
+      >
+        <span className="rs-nav-icon">
+          <SidebarIcon id={item.id} />
+        </span>
+        {!sidebarCollapsed && <span className="rs-nav-label">{label}</span>}
+        {!sidebarCollapsed && item.stage2 && (
+          <span className="rs-tag-stage2" title={t.stage2Title}>
+            {t.stage2Tag}
           </span>
         )}
       </button>
@@ -220,7 +248,7 @@ export const Sidebar: React.FC = () => {
   };
 
   return (
-    <aside className={`rs-sidebar ${sidebarCollapsed ? 'is-collapsed' : ''}`} aria-label="Điều hướng chính">
+    <aside className={`rs-sidebar ${sidebarCollapsed ? 'is-collapsed' : ''}`} aria-label={t.mainNavAria}>
       <div className="rs-brand">
         <div className="rs-brand-left">
           <div className="rs-brand-logo" aria-hidden="true">
@@ -232,28 +260,28 @@ export const Sidebar: React.FC = () => {
 
       <div className="rs-sidebar-scroll">
         <div>
-          {!sidebarCollapsed && <div className="rs-nav-section-title">Global Research</div>}
-          <nav className="rs-nav-list" aria-label="Global Research">
-            {GLOBAL_MENU.map(renderNavBtn)}
+          {!sidebarCollapsed && <div className="rs-nav-section-title">{t.globalSection}</div>}
+          <nav className="rs-nav-list" aria-label={t.globalSection}>
+            {GLOBAL_MENU.map(renderGlobalBtn)}
           </nav>
         </div>
 
         <div className="rs-sidebar-divider" />
 
         <div>
-          {!sidebarCollapsed && <div className="rs-nav-section-title">Project Research</div>}
+          {!sidebarCollapsed && <div className="rs-nav-section-title">{t.projectSection}</div>}
           {!sidebarCollapsed && (
             <div className="rs-project-switcher">
               <select
                 id="rs-project-select"
-                aria-label="Chọn Project đang hoạt động"
+                aria-label={t.selectProjectAria}
                 className="rs-select rs-select-compact"
                 value={activeProjectId}
                 disabled={projects.length === 0}
                 onChange={(e) => switchProject(e.target.value)}
               >
                 {projects.length === 0 ? (
-                  <option value="">Chưa có Project</option>
+                  <option value="">{t.noProjectsOption}</option>
                 ) : (
                   projects.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -266,16 +294,16 @@ export const Sidebar: React.FC = () => {
                 type="button"
                 className="rs-btn rs-btn-secondary rs-btn-icon rs-project-add-btn"
                 onClick={() => setCreateProjectModalOpen(true)}
-                title="Tạo Project mới"
-                aria-label="Tạo Project mới"
+                title={t.createProjectTitle}
+                aria-label={t.createProjectTitle}
               >
                 <SidebarIcon id="plus" size={14} />
               </button>
             </div>
           )}
 
-          <nav className="rs-nav-list" aria-label="Project Research">
-            {PROJECT_MENU.map(renderNavBtn)}
+          <nav className="rs-nav-list" aria-label={t.projectSection}>
+            {PROJECT_MENU.map(renderProjectBtn)}
           </nav>
         </div>
       </div>
@@ -286,20 +314,20 @@ export const Sidebar: React.FC = () => {
           className={`rs-nav-item ${currentEntry.screenId === 'system-settings' ? 'is-active' : ''}`}
           style={{ flex: 1 }}
           onClick={() => navigate('system-settings')}
-          title={sidebarCollapsed ? 'Cài đặt' : 'Cài đặt hệ thống & Pháp lý'}
+          title={sidebarCollapsed ? t.settingsLabel : t.settingsTitle}
         >
           <span className="rs-nav-icon">
             <SidebarIcon id="system-settings" />
           </span>
-          {!sidebarCollapsed && <span className="rs-nav-label">Cài đặt</span>}
+          {!sidebarCollapsed && <span className="rs-nav-label">{t.settingsLabel}</span>}
         </button>
 
         <button
           type="button"
           className="rs-btn rs-btn-secondary rs-btn-icon"
           onClick={toggleSidebar}
-          title={sidebarCollapsed ? 'Mở rộng Sidebar' : 'Thu gọn Sidebar'}
-          aria-label={sidebarCollapsed ? 'Mở rộng Sidebar' : 'Thu gọn Sidebar'}
+          title={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
+          aria-label={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
         >
           <SidebarIcon id={sidebarCollapsed ? 'collapse-right' : 'collapse-left'} size={15} />
         </button>

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { getTranslations } from './i18n/translations';
 import { useAppNavigation, useScrollContainerSync } from './state/navigationStore';
 import { AppNavigationProvider } from './state/AppNavigationProvider';
 import { usePrototypeWorkspace } from './state/workspaceContext';
@@ -88,7 +89,9 @@ const ScreenOutlet: React.FC = () => {
 
 const WorkspaceShell: React.FC = () => {
   const { currentEntry, reconcileProjects } = useAppNavigation();
-  const { isBootstrapping, backendOnline, projects, toasts, dismissToast, pushToast } = usePrototypeWorkspace();
+  const { uiLanguage, isBootstrapping, backendOnline, projects, toasts, dismissToast, pushToast } =
+    usePrototypeWorkspace();
+  const toastT = getTranslations(uiLanguage).toasts;
   const scrollRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -139,7 +142,7 @@ const WorkspaceShell: React.FC = () => {
             >
               <span>
                 <strong style={{ color: toast.kind === 'error' ? 'var(--rs-danger-text)' : 'var(--rs-success-text)' }}>
-                  {toast.kind === 'error' ? 'Lỗi: ' : 'Thành công: '}
+                  {toast.kind === 'error' ? toastT.errorPrefix : toastT.successPrefix}
                 </strong>
                 {toast.message}
               </span>

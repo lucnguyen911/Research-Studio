@@ -1,3 +1,4 @@
+import { getActiveLocale, getTranslations } from '../i18n/translations';
 import type { IdeaDto, RssFeedDto, YoutubeVideoDto } from './types';
 import type { IdeaItem, ManualFormatLabel, ProjectIdeaLink, RssFeedItem, VideoItem } from '../prototype/types';
 
@@ -19,7 +20,7 @@ export function formatDateTimeVi(isoString: string | null | undefined): string {
   if (!isoString) return '—';
   const ms = Date.parse(isoString);
   if (Number.isNaN(ms)) return isoString;
-  return new Date(ms).toLocaleString('vi-VN');
+  return new Date(ms).toLocaleString(getActiveLocale());
 }
 
 function computeDaysAgo(publishedAt: string | null): number {
@@ -32,18 +33,16 @@ function computeDaysAgo(publishedAt: string | null): number {
 
 function translateHint(rawHint: string | null): string | null {
   if (!rawHint) return null;
-  if (rawHint === 'likely_shorts') return 'Khả năng cao là Shorts';
-  if (rawHint === 'likely_long_form') return 'Khả năng cao là Video dài';
+  if (rawHint === 'likely_shorts') return getTranslations().formatBadge.hintLikelyShorts;
+  if (rawHint === 'likely_long_form') return getTranslations().formatBadge.hintLikelyLongForm;
   return rawHint;
 }
 
-function translateHintConfidence(
-  rawConfidence: string | null,
-): 'Thấp–Trung bình' | 'Trung bình–Cao' | null {
+function translateHintConfidence(rawConfidence: string | null): string | null {
   if (!rawConfidence) return null;
-  if (rawConfidence === 'medium_high') return 'Trung bình–Cao';
-  if (rawConfidence === 'low_medium') return 'Thấp–Trung bình';
-  return 'Thấp–Trung bình';
+  if (rawConfidence === 'medium_high') return getTranslations().formatBadge.confMediumHigh;
+  if (rawConfidence === 'low_medium') return getTranslations().formatBadge.confLowMedium;
+  return getTranslations().formatBadge.confLowMedium;
 }
 
 export function mapYoutubeVideoDtoToItem(dto: YoutubeVideoDto): VideoItem {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatDateTimeVi } from '../api/mappers';
+import { getActiveLocale, getTranslations } from '../i18n/translations';
 import type { ScreenId } from '../prototype/types';
 import { STAGE_TWO_INFO } from '../prototype/demoData';
 import { useAppNavigation } from '../state/navigationStore';
@@ -9,7 +10,9 @@ export const StageTwoScreen: React.FC<{
   screenId: keyof typeof STAGE_TWO_INFO;
 }> = ({ screenId }) => {
   const { navigate } = useAppNavigation();
-  const info = STAGE_TWO_INFO[screenId];
+  const { uiLanguage } = usePrototypeWorkspace();
+  const sv = getTranslations(uiLanguage).statusViews;
+  const info = sv.stage2Info[screenId];
 
   return (
     <div className="rs-container">
@@ -17,25 +20,25 @@ export const StageTwoScreen: React.FC<{
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <h1 className="rs-page-title">{info.title}</h1>
-            <span className="rs-badge">Giai đoạn 2 · Chưa kích hoạt trong MVP V1</span>
+            <span className="rs-badge">{sv.stage2Badge}</span>
           </div>
-          <p className="rs-page-subtitle">Phân khu: {info.scope} · Tuân thủ lộ trình SPEC.md Mục 3</p>
+          <p className="rs-page-subtitle">{sv.scopeLine(info.scope)}</p>
         </div>
       </div>
 
       <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: 820 }}>
         <div>
-          <h2 style={{ margin: '0 0 6px', fontSize: '15.5px' }}>Mục tiêu dự kiến ở Giai đoạn 2</h2>
+          <h2 style={{ margin: '0 0 6px', fontSize: '15.5px' }}>{sv.stage2GoalTitle}</h2>
           <p style={{ margin: 0, color: 'var(--rs-text-secondary)' }}>{info.goal}</p>
         </div>
 
         <div className="rs-card-subtle">
-          <h3 style={{ margin: '0 0 6px', fontSize: '14px' }}>Lý do chưa kích hoạt ở MVP V1 (Standard Mode)</h3>
+          <h3 style={{ margin: '0 0 6px', fontSize: '14px' }}>{sv.stage2ReasonTitle}</h3>
           <p style={{ margin: 0, color: 'var(--rs-text-secondary)' }}>{info.reason}</p>
         </div>
 
         <p style={{ margin: 0, fontSize: '13px', color: 'var(--rs-text-muted)' }}>
-          Không hiển thị số liệu mẫu giả lập, biểu đồ giả, thanh tiến độ giả hay công tắc kích hoạt ngầm. Không phát sinh tác vụ API hoặc AI nền.
+          {sv.stage2FooterNote}
         </p>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingTop: 4 }}>
@@ -59,6 +62,7 @@ export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
   requiresYouTubeApi = false,
 }) => {
   const {
+    uiLanguage,
     isBootstrapping,
     backendOnline,
     systemSettings,
@@ -68,23 +72,21 @@ export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
   } = usePrototypeWorkspace();
   const { currentEntry, navigate } = useAppNavigation();
   const isPreview = isDemoPreviewScreen(currentEntry.screenId);
+  const sv = getTranslations(uiLanguage).statusViews;
+  const locale = getActiveLocale(uiLanguage);
 
   return (
     <>
       {isPreview && (
         <div className="rs-banner rs-banner-amber" role="status">
-          <div>
-            <strong>Màn hình xem trước giao diện (DEMO):</strong> Phần này vẫn đang dùng dữ liệu minh họa đọc-chỉ và sẽ
-            được kết nối SQLite + API thật trong Milestone 3–5.
-          </div>
+          <div>{sv.stage2Badge}</div>
         </div>
       )}
 
       {!isBootstrapping && !backendOnline && (
         <div className="rs-banner rs-banner-warn" role="status">
           <div>
-            <strong>Không kết nối được Backend cục bộ (127.0.0.1:8000):</strong> Không thể đọc/ghi SQLite hoặc gọi API mới.
-            Hãy kiểm tra tiến trình Uvicorn/FastAPI và bấm thử lại.
+            <strong>{sv.offlineTitle}</strong> {sv.offlineDesc}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
@@ -94,7 +96,7 @@ export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
                 void refreshWorkspaceStatus();
               }}
             >
-              Thử lại kết nối
+              {sv.retryBtn}
             </button>
           </div>
         </div>
@@ -103,11 +105,10 @@ export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
       {requiresYouTubeApi && backendOnline && !systemSettings.legalConsentAccepted && (
         <div className="rs-banner rs-banner-warn" role="alert">
           <div>
-            <strong>Chưa xác nhận Chính sách Quyền riêng tư &amp; Điều khoản YouTube:</strong> Theo yêu cầu pháp lý,
-            vui lòng đọc và xác nhận đồng ý trước khi lưu API Key hoặc gọi YouTube Data API.
+            <strong>{sv.legalBannerTitle}</strong> {sv.legalBannerDesc}
           </div>
           <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => setLegalModalOpen(true)}>
-            Mở xác nhận Pháp lý
+            {sv.legalBannerBtn}
           </button>
         </div>
       )}
@@ -115,11 +116,10 @@ export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
       {requiresYouTubeApi && backendOnline && systemSettings.apiKeyStatus === 'unreadable' && (
         <div className="rs-banner rs-banner-danger" role="alert">
           <div>
-            <strong>Không giải mã được YouTube API Key cũ (DPAPI):</strong> Có thể tệp dữ liệu được chuyển từ máy hoặc
-            tài khoản Windows khác. Hệ thống vẫn đọc dữ liệu local bình thường; vui lòng dán lại API Key mới trong Cài đặt.
+            <strong>{sv.keyUnreadableTitle}</strong> {sv.keyUnreadableDesc}
           </div>
           <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => navigate('system-settings')}>
-            Mở Cài đặt nhập lại API Key
+            {sv.keyUnreadableBtn}
           </button>
         </div>
       )}
@@ -130,11 +130,10 @@ export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
         systemSettings.apiKeyStatus === 'missing' && (
           <div className="rs-banner rs-banner-warn" role="alert">
             <div>
-              <strong>Chưa có YouTube Data API v3 Key:</strong> Các chức năng quản trị Project, RSS và Kho ý tưởng vẫn hoạt
-              động độc lập. Dán khóa cá nhân (mã hóa Windows DPAPI) trong Cài đặt để bật tra cứu YouTube.
+              <strong>{sv.keyMissingTitle}</strong> {sv.keyMissingDesc}
             </div>
             <button type="button" className="rs-btn rs-btn-sm rs-btn-primary" onClick={() => navigate('system-settings')}>
-              Mở Cài đặt API Key
+              {sv.keyMissingBtn}
             </button>
           </div>
         )}
@@ -145,12 +144,8 @@ export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
         !quotaStatus.searchQueries.exhausted && (
           <div className="rs-banner rs-banner-warn" role="status">
             <div>
-              <strong>
-                Cảnh báo sắp chạm ngưỡng Search Queries ({quotaStatus.searchQueries.used}/
-                {quotaStatus.searchQueries.limit} lượt/ngày):
-              </strong>{' '}
-              Ước tính từ sổ kế toán quota cục bộ; còn {quotaStatus.searchQueries.remaining} lượt tìm mới trước mốc
-              reset 00:00 PT ({formatDateTimeVi(quotaStatus.resetAtUtc)}).
+              <strong>{sv.quotaSearchWarnTitle(quotaStatus.searchQueries.used, quotaStatus.searchQueries.limit)}</strong>{' '}
+              {sv.quotaSearchWarnDesc(quotaStatus.searchQueries.remaining, formatDateTimeVi(quotaStatus.resetAtUtc))}
             </div>
           </div>
         )}
@@ -162,12 +157,12 @@ export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
           <div className="rs-banner rs-banner-warn" role="status">
             <div>
               <strong>
-                Cảnh báo sắp chạm ngưỡng General Data API (
-                {quotaStatus.generalData.used.toLocaleString('vi-VN')}/
-                {quotaStatus.generalData.limit.toLocaleString('vi-VN')} units/ngày):
+                {sv.quotaDataWarnTitle(
+                  quotaStatus.generalData.used.toLocaleString(locale),
+                  quotaStatus.generalData.limit.toLocaleString(locale),
+                )}
               </strong>{' '}
-              Ước tính từ sổ kế toán quota cục bộ; hãy ưu tiên dùng dữ liệu đã lưu đệm hoặc đợi reset lúc{' '}
-              {formatDateTimeVi(quotaStatus.resetAtUtc)}.
+              {sv.quotaDataWarnDesc(formatDateTimeVi(quotaStatus.resetAtUtc))}
             </div>
           </div>
         )}
@@ -176,10 +171,9 @@ export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
         <div className="rs-banner rs-banner-danger" role="alert">
           <div>
             <strong>
-              Hết hạn mức Bucket Search Queries ({quotaStatus.searchQueries.used}/{quotaStatus.searchQueries.limit} lượt/ngày):
+              {sv.quotaSearchExhaustedTitle(quotaStatus.searchQueries.used, quotaStatus.searchQueries.limit)}
             </strong>{' '}
-            <code>search.list</code> đã chạm trần ngày PT ({quotaStatus.ptDate}). Bucket{' '}
-            <strong>General Data API</strong> vẫn khả dụng bình thường.
+            {sv.quotaSearchExhaustedDesc(quotaStatus.ptDate)}
           </div>
         </div>
       )}
@@ -188,10 +182,12 @@ export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
         <div className="rs-banner rs-banner-danger" role="alert">
           <div>
             <strong>
-              Hết hạn mức Bucket General Data API ({quotaStatus.generalData.used.toLocaleString('vi-VN')}/
-              {quotaStatus.generalData.limit.toLocaleString('vi-VN')} units/ngày):
+              {sv.quotaDataExhaustedTitle(
+                quotaStatus.generalData.used.toLocaleString(locale),
+                quotaStatus.generalData.limit.toLocaleString(locale),
+              )}
             </strong>{' '}
-            Tạm dừng làm mới YouTube tới mốc reset 00:00 PT.
+            {sv.quotaDataExhaustedDesc}
           </div>
         </div>
       )}
@@ -199,22 +195,25 @@ export const GlobalModeBanners: React.FC<{ requiresYouTubeApi?: boolean }> = ({
   );
 };
 
-export const LoadingSkeletonCard: React.FC<{ label?: string }> = ({
-  label = 'Đang nạp dữ liệu từ SQLite cục bộ...',
-}) => (
-  <section className="rs-card" aria-busy="true" aria-label={label}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-      <strong>{label}</strong>
-      <span className="rs-badge">Đang tải</span>
-    </div>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <div className="rs-skeleton-line" style={{ width: '92%' }} />
-      <div className="rs-skeleton-line" style={{ width: '78%' }} />
-      <div className="rs-skeleton-line" style={{ width: '86%' }} />
-      <div className="rs-skeleton-line" style={{ width: '64%' }} />
-    </div>
-  </section>
-);
+export const LoadingSkeletonCard: React.FC<{ label?: string }> = ({ label }) => {
+  const { uiLanguage } = usePrototypeWorkspace();
+  const tr = getTranslations(uiLanguage);
+  const resolvedLabel = label ?? tr.statusViews.defaultLoadingLabel;
+  return (
+    <section className="rs-card" aria-busy="true" aria-label={resolvedLabel}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <strong>{resolvedLabel}</strong>
+        <span className="rs-badge">{tr.common.loadingBadge}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div className="rs-skeleton-line" style={{ width: '92%' }} />
+        <div className="rs-skeleton-line" style={{ width: '78%' }} />
+        <div className="rs-skeleton-line" style={{ width: '86%' }} />
+        <div className="rs-skeleton-line" style={{ width: '64%' }} />
+      </div>
+    </section>
+  );
+};
 
 export const EmptyStateCard: React.FC<{
   title: string;

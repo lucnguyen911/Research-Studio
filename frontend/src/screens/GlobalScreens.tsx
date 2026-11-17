@@ -14,6 +14,7 @@ import {
   updateRssArticleApi,
 } from '../api/client';
 import { formatDateTimeVi, mapYoutubeVideoDtoToItem } from '../api/mappers';
+import { getActiveLocale, getTranslations } from '../i18n/translations';
 import type {
   GlobalOverviewDto,
   RssArticleDto,
@@ -82,6 +83,7 @@ const OverviewShortcutIcon: React.FC<{ kind: 'trends' | 'search' | 'news' | 'ide
 export const GlobalOverviewScreen: React.FC = () => {
   const { currentEntry, navigate } = useAppNavigation();
   const {
+    uiLanguage,
     isBootstrapping,
     backendOnline,
     systemSettings,
@@ -91,6 +93,8 @@ export const GlobalOverviewScreen: React.FC = () => {
     refreshWorkspaceStatus,
     setCreateProjectModalOpen,
   } = usePrototypeWorkspace();
+  const tr = getTranslations(uiLanguage);
+  const t = tr.overview;
   const [refreshing, setRefreshing] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [overviewState, setOverviewState] = useState<{
@@ -114,13 +118,13 @@ export const GlobalOverviewScreen: React.FC = () => {
         setOverviewState({
           key: overviewKey,
           data: null,
-          error: err instanceof ApiClientError ? err.message : 'Không tải được số liệu tổng quan.',
+          error: err instanceof ApiClientError ? err.message : t.offlineError,
         });
       });
     return () => {
       controller.abort();
     };
-  }, [overviewKey]);
+  }, [overviewKey, t.offlineError]);
 
   const ov = overviewState.data;
   const overviewError = overviewState.key === overviewKey ? overviewState.error : null;
@@ -150,29 +154,29 @@ export const GlobalOverviewScreen: React.FC = () => {
     !isBootstrapping && !backendOnline
       ? {
           danger: true,
-          message: 'Không thể kết nối dịch vụ dữ liệu cục bộ.',
-          actionLabel: 'Thử lại',
+          message: t.offlineError,
+          actionLabel: tr.common.retry,
           onAction: handleRefresh,
         }
       : overviewError
         ? {
             danger: true,
             message: overviewError,
-            actionLabel: 'Thử lại',
+            actionLabel: tr.common.retry,
             onAction: handleRefresh,
           }
         : systemSettings.apiKeyStatus === 'unreadable'
           ? {
               danger: true,
-              message: 'Không đọc được YouTube API Key đã lưu.',
-              actionLabel: 'Cập nhật khóa',
+              message: t.keyUnreadableError,
+              actionLabel: t.updateKeyBtn,
               onAction: () => navigate('system-settings'),
             }
           : quotaExhausted
             ? {
                 danger: false,
-                message: 'Hạn mức YouTube API hôm nay đã hết (làm mới lúc 00:00 PT). Dữ liệu đã lưu và RSS vẫn hoạt động.',
-                actionLabel: 'Xem cài đặt',
+                message: t.quotaExhaustedNotice,
+                actionLabel: t.viewSettingsBtn,
                 onAction: () => navigate('system-settings'),
               }
             : null;
@@ -186,33 +190,33 @@ export const GlobalOverviewScreen: React.FC = () => {
     {
       id: 'global-trends',
       icon: 'trends',
-      title: 'Xu hướng',
-      desc: 'Video thịnh hành theo quốc gia',
+      title: t.shortcuts.trends.title,
+      desc: t.shortcuts.trends.desc,
     },
     {
       id: 'global-search',
       icon: 'search',
-      title: 'Nghiên cứu',
-      desc: 'Tìm kiếm video và kênh',
+      title: t.shortcuts.search.title,
+      desc: t.shortcuts.search.desc,
     },
     {
       id: 'global-news',
       icon: 'news',
-      title: 'Tin tức',
-      desc: 'Theo dõi nguồn tin RSS',
+      title: t.shortcuts.news.title,
+      desc: t.shortcuts.news.desc,
     },
     {
       id: 'global-ideas',
       icon: 'ideas',
-      title: 'Ý tưởng',
-      desc: 'Kho lưu trữ chủ đề nội dung',
+      title: t.shortcuts.ideas.title,
+      desc: t.shortcuts.ideas.desc,
     },
   ];
 
   return (
     <div className="rs-container">
       <div className="rs-page-header" style={{ alignItems: 'center' }}>
-        <h1 className="rs-page-title">Tổng quan</h1>
+        <h1 className="rs-page-title">{t.title}</h1>
         <div className="rs-overview-actions">
           <button
             type="button"
@@ -226,14 +230,14 @@ export const GlobalOverviewScreen: React.FC = () => {
               <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
               <path d="M16 16h5v5" />
             </svg>
-            {refreshing ? 'Đang tải...' : 'Làm mới'}
+            {refreshing ? tr.common.refreshing : tr.common.refresh}
           </button>
           <button
             type="button"
             className="rs-btn rs-btn-primary"
             onClick={() => setCreateProjectModalOpen(true)}
           >
-            + Tạo Project
+            {t.createProjectBtn}
           </button>
         </div>
       </div>
@@ -261,62 +265,62 @@ export const GlobalOverviewScreen: React.FC = () => {
           <div className="rs-grid-3">
             <section className="rs-card rs-stat-card">
               <div className="rs-stat-top">
-                <span className="rs-stat-label">Project</span>
+                <span className="rs-stat-label">{t.statProjects}</span>
                 {activeProject && (
                   <button
                     type="button"
                     className="rs-link-quiet"
                     onClick={() => navigate('project-overview')}
                   >
-                    Mở →
+                    {t.statOpenProject}
                   </button>
                 )}
               </div>
               <div className="rs-stat-value">{projects.length}</div>
               <div className="rs-stat-meta" title={activeProject?.name ?? undefined}>
                 {projects.length === 0
-                  ? 'Chưa có dự án nào'
+                  ? t.statNoProjects
                   : activeProject
-                    ? `Đang chọn: ${activeProject.name}`
-                    : `${projects.length} dự án`}
+                    ? t.statActiveProject(activeProject.name)
+                    : t.statProjectCount(projects.length)}
               </div>
             </section>
 
             <section className="rs-card rs-stat-card">
               <div className="rs-stat-top">
-                <span className="rs-stat-label">Ý tưởng</span>
+                <span className="rs-stat-label">{t.statIdeas}</span>
                 <button
                   type="button"
                   className="rs-link-quiet"
                   onClick={() => navigate('global-ideas')}
                 >
-                  Mở kho →
+                  {t.statOpenVault}
                 </button>
               </div>
               <div className="rs-stat-value">{ov?.ideasTotalCount ?? ideas.length}</div>
               <div className="rs-stat-meta">
                 {(ov?.ideasUnlinkedCount ?? 0) > 0
-                  ? `${ov?.ideasUnlinkedCount} chưa gắn Project`
-                  : 'Trong kho ý tưởng'}
+                  ? t.statUnlinkedIdeas(ov?.ideasUnlinkedCount ?? 0)
+                  : t.statInIdeaVault}
               </div>
             </section>
 
             <section className="rs-card rs-stat-card">
               <div className="rs-stat-top">
-                <span className="rs-stat-label">Tin tức mới</span>
+                <span className="rs-stat-label">{t.statNews}</span>
                 <button
                   type="button"
                   className="rs-link-quiet"
                   onClick={() => navigate('global-news')}
                 >
-                  Xem tin →
+                  {t.statViewNews}
                 </button>
               </div>
               <div className="rs-stat-value">{ov?.rssSummary.articlesCount ?? 0}</div>
               <div className="rs-stat-meta">
                 {(ov?.rssSummary.errorCount ?? 0) > 0
-                  ? `${ov?.rssSummary.enabled ?? 0} nguồn đang bật · ${ov?.rssSummary.errorCount} nguồn lỗi`
-                  : `${ov?.rssSummary.enabled ?? 0} nguồn đang theo dõi`}
+                  ? t.statSourcesWithErrors(ov?.rssSummary.enabled ?? 0, ov?.rssSummary.errorCount ?? 0)
+                  : t.statSourcesFollowing(ov?.rssSummary.enabled ?? 0)}
               </div>
             </section>
           </div>
@@ -324,25 +328,25 @@ export const GlobalOverviewScreen: React.FC = () => {
           <div className="rs-grid-2">
             <section className="rs-card rs-section-card">
               <div className="rs-section-header">
-                <h2 className="rs-section-heading">Ý tưởng gần đây</h2>
+                <h2 className="rs-section-heading">{t.recentIdeasTitle}</h2>
                 <button
                   type="button"
                   className="rs-link-quiet"
                   onClick={() => navigate('global-ideas')}
                 >
-                  Xem tất cả
+                  {tr.common.viewAll}
                 </button>
               </div>
 
               {recentIdeas.length === 0 ? (
                 <div className="rs-clean-empty">
-                  <span>Chưa có ý tưởng nào được lưu.</span>
+                  <span>{t.noIdeasYet}</span>
                   <button
                     type="button"
                     className="rs-btn rs-btn-sm rs-btn-secondary"
                     onClick={() => navigate('global-ideas')}
                   >
-                    Thêm ý tưởng
+                    {t.addIdeaBtn}
                   </button>
                 </div>
               ) : (
@@ -361,7 +365,7 @@ export const GlobalOverviewScreen: React.FC = () => {
                         </button>
                         <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>
                           {formatDateTimeVi(idea.updatedAt)} ·{' '}
-                          {linkedCount > 0 ? `${linkedCount} Project` : 'Kho chung'}
+                          {linkedCount > 0 ? t.linkedProjectsCount(linkedCount) : t.sharedVaultLabel}
                         </div>
                       </div>
                     );
@@ -372,25 +376,25 @@ export const GlobalOverviewScreen: React.FC = () => {
 
             <section className="rs-card rs-section-card">
               <div className="rs-section-header">
-                <h2 className="rs-section-heading">Tin tức mới nhất</h2>
+                <h2 className="rs-section-heading">{t.latestNewsTitle}</h2>
                 <button
                   type="button"
                   className="rs-link-quiet"
                   onClick={() => navigate('global-news')}
                 >
-                  Xem tất cả
+                  {tr.common.viewAll}
                 </button>
               </div>
 
               {latestArticles.length === 0 ? (
                 <div className="rs-clean-empty">
-                  <span>Chưa có bài viết mới từ các nguồn RSS.</span>
+                  <span>{t.noNewsYet}</span>
                   <button
                     type="button"
                     className="rs-btn rs-btn-sm rs-btn-secondary"
                     onClick={() => navigate('global-news')}
                   >
-                    Thêm nguồn tin
+                    {t.addFeedBtn}
                   </button>
                 </div>
               ) : (
@@ -406,7 +410,7 @@ export const GlobalOverviewScreen: React.FC = () => {
                         {art.title}
                       </button>
                       <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>
-                        Nguồn: RSS · {art.feedName} · {formatDateTimeVi(art.publishedAt ?? art.fetchedAt)}
+                        {t.rssSourcePrefix}: {art.feedName} · {formatDateTimeVi(art.publishedAt ?? art.fetchedAt)}
                       </div>
                     </div>
                   ))}
@@ -415,7 +419,7 @@ export const GlobalOverviewScreen: React.FC = () => {
             </section>
           </div>
 
-          <div className="rs-shortcut-section-label">Lối tắt</div>
+          <div className="rs-shortcut-section-label">{t.shortcutsTitle}</div>
           <div className="rs-grid-4">
             {shortcuts.map((sc) => (
               <button
@@ -440,18 +444,10 @@ export const GlobalOverviewScreen: React.FC = () => {
   );
 };
 
-const TREND_REGIONS: Array<{ code: string; label: string }> = [
-  { code: 'VN', label: 'VN — Việt Nam' },
-  { code: 'US', label: 'US — Hoa Kỳ' },
-  { code: 'JP', label: 'JP — Nhật Bản' },
-  { code: 'KR', label: 'KR — Hàn Quốc' },
-  { code: 'GB', label: 'GB — Vương quốc Anh' },
-  { code: 'DE', label: 'DE — Đức' },
-];
-
 export const TrendDiscoveryScreen: React.FC = () => {
   const { currentEntry, updateViewState, navigate } = useAppNavigation();
   const {
+    uiLanguage,
     backendOnline,
     systemSettings,
     quotaStatus,
@@ -461,6 +457,9 @@ export const TrendDiscoveryScreen: React.FC = () => {
     setLegalModalOpen,
     pushToast,
   } = usePrototypeWorkspace();
+  const tr = getTranslations(uiLanguage);
+  const t = tr.trends;
+  const locale = getActiveLocale(uiLanguage);
 
   const vs = currentEntry.viewState;
   const region = vs.regionCodeFilter ?? systemSettings.defaultRegionCode ?? 'VN';
@@ -468,7 +467,7 @@ export const TrendDiscoveryScreen: React.FC = () => {
   const cacheKey = `${region}:${category}`;
 
   const [categories, setCategories] = useState<YoutubeCategoryDto[]>([
-    { id: 'all', title: 'Tất cả danh mục' },
+    { id: 'all', title: t.categories.all },
   ]);
   const [trendsReloadNonce, setTrendsReloadNonce] = useState(0);
   const [trendsState, setTrendsState] = useState<{
@@ -509,20 +508,20 @@ export const TrendDiscoveryScreen: React.FC = () => {
       })
       .catch((err) => {
         if (isAbortError(err) || controller.signal.aborted) return;
-        const msg = err instanceof ApiClientError ? err.message : 'Không tải được dữ liệu xu hướng đã lưu.';
+        const msg = err instanceof ApiClientError ? err.message : t.loadFailedError;
         setTrendsState({ key: cacheKey, data: null, videos: [], error: msg });
       });
     return () => {
       controller.abort();
       refreshAbortRef.current?.abort();
     };
-  }, [region, category, cacheKey, trendsReloadNonce, registerVideosInMemory]);
+  }, [region, category, cacheKey, trendsReloadNonce, registerVideosInMemory, t.loadFailedError]);
 
   const isLoading = trendsState.key !== cacheKey && trendsState.error === null;
   const trendsError = trendsState.key === cacheKey ? trendsState.error : null;
   const trendVideos = trendsState.key === cacheKey ? trendsState.videos : [];
   const fetchedAt = trendsState.key === cacheKey ? trendsState.data?.fetchedAt : null;
-  const fetchedAtDisplay = fetchedAt ? formatDateTimeVi(fetchedAt) : 'Chưa tải dữ liệu';
+  const fetchedAtDisplay = fetchedAt ? `${t.updatedPrefix} ${formatDateTimeVi(fetchedAt)}` : t.notLoadedYet;
 
   const needsSetup = !systemSettings.legalConsentAccepted || systemSettings.apiKeyStatus !== 'configured';
   const blocked =
@@ -532,15 +531,15 @@ export const TrendDiscoveryScreen: React.FC = () => {
     refreshing;
 
   const blockedReason = !backendOnline
-    ? 'Chưa kết nối được dịch vụ dữ liệu cục bộ.'
+    ? t.offlineReason
     : !systemSettings.legalConsentAccepted
-      ? 'Cần xác nhận điều khoản YouTube trước khi tải dữ liệu mới.'
+      ? t.termsReason
       : systemSettings.apiKeyStatus === 'unreadable'
-        ? 'YouTube API Key hiện tại không đọc được.'
+        ? t.keyUnreadableReason
         : systemSettings.apiKeyStatus !== 'configured'
-          ? 'Cần cài đặt YouTube API Key trong Cài đặt.'
+          ? t.keyMissingReason
           : quotaStatus.generalData.exhausted
-            ? 'Đã hết hạn mức dữ liệu YouTube hôm nay.'
+            ? t.quotaExhaustedReason
             : undefined;
 
   const handleRefreshTrends = () => {
@@ -555,15 +554,15 @@ export const TrendDiscoveryScreen: React.FC = () => {
         registerVideosInMemory(mapped);
         setTrendsState({ key: cacheKey, data: res, videos: mapped, error: null });
         void syncQuotaStatus();
-        pushToast('success', `Đã cập nhật ${mapped.length} video xu hướng (${region}).`);
+        pushToast('success', t.loadedToast(mapped.length, region));
       })
       .catch((err) => {
         if (isAbortError(err)) {
-          pushToast('success', 'Đã hủy tải xu hướng.');
+          pushToast('success', t.cancelledToast);
           return;
         }
         void syncQuotaStatus();
-        pushToast('error', err instanceof ApiClientError ? err.message : 'Không thể tải dữ liệu xu hướng từ YouTube.');
+        pushToast('error', err instanceof ApiClientError ? err.message : t.fetchFailedToast);
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -581,48 +580,49 @@ export const TrendDiscoveryScreen: React.FC = () => {
     })();
   };
 
-  const regionOptions = TREND_REGIONS.some((r) => r.code === region)
-    ? TREND_REGIONS
-    : [{ code: region, label: region }, ...TREND_REGIONS];
+  const regionOptions = t.regions.some((r) => r.code === region)
+    ? t.regions
+    : [{ code: region, label: region }, ...t.regions];
 
   const contextualBanner = !backendOnline
     ? {
         danger: true,
-        message: 'Không kết nối được dịch vụ dữ liệu cục bộ.',
-        actionLabel: 'Thử lại',
+        message: t.offlineBanner,
+        actionLabel: tr.common.retry,
         onAction: handleRetryConnection,
       }
     : trendsError
       ? {
           danger: true,
           message: trendsError,
-          actionLabel: 'Thử lại',
+          actionLabel: tr.common.retry,
           onAction: () => setTrendsReloadNonce((n) => n + 1),
         }
       : systemSettings.apiKeyStatus === 'unreadable'
         ? {
             danger: true,
-            message: 'Không đọc được YouTube API Key đã lưu.',
-            actionLabel: 'Cập nhật API Key',
+            message: t.keyUnreadableBanner,
+            actionLabel: t.updateKeyBtn,
             onAction: () => navigate('system-settings'),
           }
         : quotaStatus.generalData.exhausted
           ? {
               danger: true,
-              message: 'Đã hết hạn mức dữ liệu YouTube hôm nay (làm mới lúc 00:00 PT). Bạn vẫn xem được các video đã lưu.',
+              message: t.quotaExhaustedBanner,
             }
           : quotaStatus.generalData.warning
             ? {
                 danger: false,
-                message: `Sắp chạm hạn mức dữ liệu YouTube trong ngày (${quotaStatus.generalData.used.toLocaleString('vi-VN')}/${quotaStatus.generalData.limit.toLocaleString('vi-VN')}).`,
+                message: t.quotaWarningBanner(
+                  quotaStatus.generalData.used.toLocaleString(locale),
+                  quotaStatus.generalData.limit.toLocaleString(locale),
+                ),
               }
             : trendVideos.length > 0 && needsSetup
               ? {
                   danger: false,
-                  message: !systemSettings.legalConsentAccepted
-                    ? 'Cần xác nhận điều khoản YouTube để cập nhật danh sách mới.'
-                    : 'Cần cấu hình YouTube API Key để cập nhật danh sách mới.',
-                  actionLabel: !systemSettings.legalConsentAccepted ? 'Xác nhận điều khoản' : 'Mở Cài đặt',
+                  message: !systemSettings.legalConsentAccepted ? t.needTermsNotice : t.needKeyNotice,
+                  actionLabel: !systemSettings.legalConsentAccepted ? t.acceptTermsBtn : tr.common.openSettings,
                   onAction: !systemSettings.legalConsentAccepted
                     ? () => setLegalModalOpen(true)
                     : () => navigate('system-settings'),
@@ -633,11 +633,11 @@ export const TrendDiscoveryScreen: React.FC = () => {
     <div className="rs-container">
       <div className="rs-page-header" style={{ alignItems: 'center' }}>
         <div>
-          <h1 className="rs-page-title">Khám phá xu hướng</h1>
+          <h1 className="rs-page-title">{t.title}</h1>
           <div className="rs-trends-meta">
-            <span>Nguồn: YouTube</span>
+            <span>{t.sourceLabel}</span>
             <span aria-hidden="true">·</span>
-            <span>{fetchedAt ? `Cập nhật ${fetchedAtDisplay}` : fetchedAtDisplay}</span>
+            <span>{fetchedAtDisplay}</span>
             <span aria-hidden="true">·</span>
             <a
               href="https://www.youtube.com/feed/trending"
@@ -645,7 +645,7 @@ export const TrendDiscoveryScreen: React.FC = () => {
               rel="noopener noreferrer"
               className="rs-link-quiet"
             >
-              YouTube Thịnh hành ↗
+              {t.youtubeTrendingLink}
             </a>
           </div>
         </div>
@@ -660,7 +660,7 @@ export const TrendDiscoveryScreen: React.FC = () => {
                 setRefreshing(false);
               }}
             >
-              Hủy
+              {tr.common.cancel}
             </button>
           ) : (
             <button
@@ -670,7 +670,7 @@ export const TrendDiscoveryScreen: React.FC = () => {
               title={blockedReason}
               onClick={handleRefreshTrends}
             >
-              {trendVideos.length > 0 ? 'Làm mới xu hướng' : 'Tải xu hướng'}
+              {trendVideos.length > 0 ? t.refreshBtn : t.loadBtn}
             </button>
           )}
         </div>
@@ -696,9 +696,9 @@ export const TrendDiscoveryScreen: React.FC = () => {
 
       <div className="rs-trends-bar">
         <label className="rs-trends-field">
-          <span className="rs-trends-field-label">Quốc gia</span>
+          <span className="rs-trends-field-label">{t.countryLabel}</span>
           <select
-            aria-label="Quốc gia"
+            aria-label={t.countryLabel}
             className="rs-select rs-select-compact"
             value={region}
             onChange={(e) => updateViewState({ regionCodeFilter: e.target.value, page: 1 })}
@@ -712,51 +712,47 @@ export const TrendDiscoveryScreen: React.FC = () => {
         </label>
 
         <label className="rs-trends-field">
-          <span className="rs-trends-field-label">Danh mục</span>
+          <span className="rs-trends-field-label">{t.categoryLabel}</span>
           <select
-            aria-label="Danh mục"
+            aria-label={t.categoryLabel}
             className="rs-select rs-select-compact"
             value={category}
             onChange={(e) => updateViewState({ categoryFilter: e.target.value, page: 1 })}
           >
             {categories.map((cat) => (
               <option key={cat.id} value={cat.id}>
-                {cat.title}
+                {t.categories[cat.id] ?? cat.title}
               </option>
             ))}
           </select>
         </label>
 
         {trendVideos.length > 0 && (
-          <span className="rs-trends-count rs-tabular">{trendVideos.length} video</span>
+          <span className="rs-trends-count rs-tabular">{t.videoCount(trendVideos.length)}</span>
         )}
       </div>
 
       {isLoading ? (
-        <LoadingSkeletonCard label="Đang tải danh sách xu hướng..." />
+        <LoadingSkeletonCard label={t.loadingLabel} />
       ) : trendVideos.length === 0 ? (
         needsSetup ? (
           <EmptyStateCard
-            title="Chưa thiết lập kết nối YouTube API"
-            description={
-              !systemSettings.legalConsentAccepted
-                ? 'Xác nhận điều khoản YouTube và lưu API Key cá nhân trong Cài đặt để tải danh sách video thịnh hành.'
-                : 'Thêm YouTube API Key cá nhân trong Cài đặt để tải danh sách video thịnh hành.'
-            }
-            actionLabel={!systemSettings.legalConsentAccepted ? 'Xác nhận điều khoản' : 'Thiết lập API Key'}
+            title={t.setupTitle}
+            description={!systemSettings.legalConsentAccepted ? t.setupNeedTermsDesc : t.setupNeedKeyDesc}
+            actionLabel={!systemSettings.legalConsentAccepted ? t.acceptTermsBtn : t.setupKeyBtn}
             onAction={
               !systemSettings.legalConsentAccepted
                 ? () => setLegalModalOpen(true)
                 : () => navigate('system-settings')
             }
-            secondaryLabel={!systemSettings.legalConsentAccepted ? 'Mở Cài đặt' : undefined}
+            secondaryLabel={!systemSettings.legalConsentAccepted ? tr.common.openSettings : undefined}
             onSecondary={!systemSettings.legalConsentAccepted ? () => navigate('system-settings') : undefined}
           />
         ) : (
           <EmptyStateCard
-            title="Chưa có dữ liệu xu hướng cho lựa chọn này"
-            description={`Bấm "Tải xu hướng" để lấy danh sách video thịnh hành mới nhất tại ${region}.`}
-            actionLabel={blocked ? undefined : 'Tải xu hướng'}
+            title={t.emptyTitle}
+            description={t.emptyDesc(region)}
+            actionLabel={blocked ? undefined : t.loadBtn}
             onAction={blocked ? undefined : handleRefreshTrends}
           />
         )
@@ -765,8 +761,8 @@ export const TrendDiscoveryScreen: React.FC = () => {
           videos={trendVideos}
           fromScreen="global-trends"
           pageSize={15}
-          emptyTitle="Không có video nào khớp bộ lọc"
-          emptyDescription="Thử đổi từ khóa tìm kiếm hoặc đặt lại bộ lọc."
+          emptyTitle={t.noMatchTitle}
+          emptyDescription={t.noMatchDesc}
         />
       )}
     </div>

@@ -17,6 +17,7 @@ import type {
   RssFeedItem,
   ScreenId,
   ThemeMode,
+  UiLanguage,
   UiSimulatorMode,
   VideoItem,
 } from '../prototype/types';
@@ -44,6 +45,8 @@ export interface SaveIdeaDraft {
 }
 
 export interface PrototypeWorkspaceContextValue {
+  uiLanguage: UiLanguage;
+  setUiLanguage: (next: UiLanguage) => void;
   theme: ThemeMode;
   toggleTheme: () => void;
   setTheme: (next: ThemeMode) => void;

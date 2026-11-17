@@ -10,13 +10,15 @@
         try {
           var saved = localStorage.getItem('rs_theme');
           var theme = saved === 'dark' ? 'dark' : 'light';
+          var lang = localStorage.getItem('rs_ui_lang') === 'en' ? 'en' : 'vi';
           var root = document.documentElement;
           root.classList.remove('light', 'dark');
           root.classList.add(theme);
           root.setAttribute('data-theme', theme);
           root.style.colorScheme = theme;
+          root.lang = lang;
         } catch (_err) {
-          // Safe fallback to Light Mode
+          // Safe fallback to Light Mode & Vietnamese
         }
       })();
     </script>

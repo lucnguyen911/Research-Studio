@@ -1,4 +1,5 @@
 export type ThemeMode = 'light' | 'dark';
+export type UiLanguage = 'vi' | 'en';
 
 export type GlobalScreenId =
   | 'global-overview'
@@ -94,7 +95,7 @@ export interface VideoItem {
   commentCount: number | null;
   sourceFormatStatus: SourceFormatStatus;
   formatHint: string | null;
-  formatHintConfidence: 'Thấp–Trung bình' | 'Trung bình–Cao' | null;
+  formatHintConfidence: string | null;
   formatHintBasis: string | null;
   defaultManualFormat: ManualFormatLabel;
   tags: string[];

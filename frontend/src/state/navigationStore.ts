@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useLayoutEffect } from 'react';
+import { getTranslations } from '../i18n/translations';
 import type { NavHistoryEntry, RouteParams, ScreenId, ViewFilterState } from '../prototype/types';
 
 const STORAGE_KEY = 'rs_nav_stack_v1';
@@ -350,8 +351,8 @@ export function reconcileValidProjects(
     emit();
     onDeletedFallback?.(
       fallbackId
-        ? 'Project trước đó không còn tồn tại; đã tự động chuyển sang Project khả dụng.'
-        : 'Project trước đó đã bị xóa; đã chuyển an toàn về Global Research.',
+        ? getTranslations().toasts.projectFallbackMoved
+        : getTranslations().toasts.projectFallbackGlobal,
     );
   }
 }

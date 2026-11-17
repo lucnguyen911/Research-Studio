@@ -1,31 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { ScreenId } from '../prototype/types';
+import { getActiveLocale, getTranslations } from '../i18n/translations';
+import type { UiLanguage } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
 import { isDemoPreviewScreen, usePrototypeWorkspace } from '../state/workspaceContext';
-
-const SCREEN_TITLES: Record<ScreenId, string> = {
-  'global-overview': 'Tổng quan',
-  'global-trends': 'Khám phá xu hướng',
-  'global-search': 'Nghiên cứu tự do',
-  'global-featured-stage2': 'Video nổi bật',
-  'global-news': 'Tin tức & thảo luận',
-  'global-ideas': 'Kho ý tưởng chung',
-  'project-overview': 'Tổng quan dự án',
-  'project-hot-topics-stage2': 'Chủ đề nóng',
-  'project-keywords': 'Nghiên cứu từ khóa',
-  'project-breakout': 'Video bứt phá',
-  'project-competitors': 'Theo dõi đối thủ',
-  'project-evergreen-stage2': 'Chủ đề dài hạn',
-  'project-opportunities-stage2': 'Cơ hội nội dung',
-  'project-ai-stage2': 'Nghiên cứu AI',
-  'project-ideas': 'Quản lý ý tưởng',
-  'project-settings': 'Cài đặt dự án',
-  'channel-detail': 'Chi tiết kênh',
-  'video-detail': 'Chi tiết video',
-  'article-detail': 'Chi tiết bài viết',
-  'idea-detail': 'Chi tiết ý tưởng',
-  'system-settings': 'Cài đặt',
-};
 
 const iconProps = {
   width: 15,
@@ -42,6 +19,8 @@ const iconProps = {
 export const TopBar: React.FC = () => {
   const { currentEntry, canGoBack, canGoForward, goBack, goForward, navigate } = useAppNavigation();
   const {
+    uiLanguage,
+    setUiLanguage,
     theme,
     toggleTheme,
     backendOnline,
@@ -54,6 +33,9 @@ export const TopBar: React.FC = () => {
     refreshWorkspaceStatus,
     setLegalModalOpen,
   } = usePrototypeWorkspace();
+
+  const t = getTranslations(uiLanguage).topbar;
+  const locale = getActiveLocale(uiLanguage);
 
   const [popoverOpen, setPopoverOpen] = useState(false);
   const popoverWrapRef = useRef<HTMLDivElement | null>(null);
@@ -85,26 +67,26 @@ export const TopBar: React.FC = () => {
     const sid = currentEntry.screenId;
     if (sid.startsWith('global-')) {
       return [
-        { label: 'Global Research', onClick: () => navigate('global-overview') },
-        { label: SCREEN_TITLES[sid] },
+        { label: t.globalCrumb, onClick: () => navigate('global-overview') },
+        { label: t.screenTitles[sid] },
       ];
     }
     if (sid.startsWith('project-')) {
       return [
         {
-          label: activeProject ? activeProject.name : 'Dự án',
+          label: activeProject ? activeProject.name : t.projectFallbackCrumb,
           onClick: () => navigate('project-overview'),
         },
-        { label: SCREEN_TITLES[sid] },
+        { label: t.screenTitles[sid] },
       ];
     }
     if (sid === 'channel-detail') {
       const chId = currentEntry.params.channelId;
       const sampleVid = chId ? Object.values(cachedVideosById).find((v) => v.channelId === chId) : undefined;
       return [
-        { label: activeProject ? activeProject.name : 'Dự án', onClick: () => navigate('project-overview') },
-        { label: 'Theo dõi đối thủ', onClick: () => navigate('project-competitors') },
-        { label: sampleVid?.channelTitle ?? chId ?? 'Chi tiết kênh' },
+        { label: activeProject ? activeProject.name : t.projectFallbackCrumb, onClick: () => navigate('project-overview') },
+        { label: t.competitorsCrumb, onClick: () => navigate('project-competitors') },
+        { label: sampleVid?.channelTitle ?? chId ?? t.channelCrumb },
       ];
     }
     if (sid === 'video-detail') {
@@ -113,38 +95,38 @@ export const TopBar: React.FC = () => {
       const crumbs: Array<{ label: string; onClick?: () => void }> = [];
       if (currentEntry.params.fromScreen === 'global-trends' || currentEntry.params.fromScreen === 'global-search') {
         crumbs.push({
-          label: SCREEN_TITLES[currentEntry.params.fromScreen],
+          label: t.screenTitles[currentEntry.params.fromScreen],
           onClick: () => navigate(currentEntry.params.fromScreen!),
         });
       } else {
         crumbs.push({
-          label: 'Theo dõi đối thủ',
+          label: t.competitorsCrumb,
           onClick: () => navigate('project-competitors'),
         });
         if (fromChId) {
           crumbs.push({
-            label: vid?.channelTitle || 'Chi tiết kênh',
+            label: vid?.channelTitle || t.channelCrumb,
             onClick: () => navigate('channel-detail', { params: { channelId: fromChId } }),
           });
         }
       }
-      crumbs.push({ label: vid?.title || 'Chi tiết video' });
+      crumbs.push({ label: vid?.title || t.videoCrumb });
       return crumbs;
     }
     if (sid === 'article-detail') {
       return [
-        { label: 'Tin tức & thảo luận', onClick: () => navigate('global-news') },
-        { label: 'Chi tiết bài viết' },
+        { label: t.rssCrumb, onClick: () => navigate('global-news') },
+        { label: t.screenTitles[sid] },
       ];
     }
     if (sid === 'idea-detail') {
       const idea = ideas.find((i) => i.id === currentEntry.params.ideaId);
       return [
-        { label: 'Kho ý tưởng', onClick: () => navigate('global-ideas') },
-        { label: idea?.title ?? 'Chi tiết ý tưởng' },
+        { label: t.ideasCrumb, onClick: () => navigate('global-ideas') },
+        { label: idea?.title ?? t.ideaCrumb },
       ];
     }
-    return [{ label: 'Hệ thống' }, { label: SCREEN_TITLES[sid] }];
+    return [{ label: t.systemCrumb }, { label: t.screenTitles[sid] }];
   };
 
   const crumbs = buildCrumbs();
@@ -154,7 +136,7 @@ export const TopBar: React.FC = () => {
 
   const urgentAlert = !isBootstrapping && !backendOnline
     ? {
-        label: 'Mất kết nối',
+        label: t.alerts.offline,
         danger: true,
         onClick: () => {
           void refreshWorkspaceStatus();
@@ -162,19 +144,19 @@ export const TopBar: React.FC = () => {
       }
     : systemSettings.apiKeyStatus === 'unreadable'
       ? {
-          label: 'Lỗi API Key',
+          label: t.alerts.apiKeyError,
           danger: true,
           onClick: () => navigate('system-settings'),
         }
       : quotaExhausted
         ? {
-            label: 'Hết hạn mức API',
+            label: t.alerts.quotaExhausted,
             danger: true,
             onClick: () => setPopoverOpen((v) => !v),
           }
         : quotaWarning
           ? {
-              label: 'Sắp hết hạn mức',
+              label: t.alerts.quotaWarning,
               danger: false,
               onClick: () => setPopoverOpen((v) => !v),
             }
@@ -209,8 +191,8 @@ export const TopBar: React.FC = () => {
             className="rs-btn rs-btn-secondary rs-btn-icon"
             disabled={!canGoBack}
             onClick={goBack}
-            title="Quay lại (Back)"
-            aria-label="Quay lại"
+            title={t.backTitle}
+            aria-label={t.backLabel}
           >
             <svg {...iconProps}>
               <path d="M19 12H5" />
@@ -222,8 +204,8 @@ export const TopBar: React.FC = () => {
             className="rs-btn rs-btn-secondary rs-btn-icon"
             disabled={!canGoForward}
             onClick={goForward}
-            title="Tiến tới (Forward)"
-            aria-label="Tiến tới"
+            title={t.forwardTitle}
+            aria-label={t.forwardLabel}
           >
             <svg {...iconProps}>
               <path d="M5 12h14" />
@@ -232,7 +214,7 @@ export const TopBar: React.FC = () => {
           </button>
         </div>
 
-        <nav className="rs-breadcrumb" aria-label="Breadcrumb">
+        <nav className="rs-breadcrumb" aria-label={t.breadcrumbAria}>
           {crumbs.map((c, idx) => (
             <React.Fragment key={`${c.label}-${idx}`}>
               {idx > 0 && <span aria-hidden="true">/</span>}
@@ -250,8 +232,8 @@ export const TopBar: React.FC = () => {
         </nav>
 
         {isPreview && (
-          <span className="rs-tag-stage2" title="Tính năng thuộc Giai đoạn 2">
-            Giai đoạn 2
+          <span className="rs-tag-stage2" title={t.stage2BadgeTitle}>
+            {t.stage2Badge}
           </span>
         )}
       </div>
@@ -274,26 +256,28 @@ export const TopBar: React.FC = () => {
             aria-expanded={popoverOpen}
             aria-haspopup="dialog"
             onClick={() => setPopoverOpen((v) => !v)}
-            title="Xem hạn mức YouTube và trạng thái kết nối"
+            title={t.quotaBtnTitle}
           >
             <span className={dotClass} aria-hidden="true" />
-            <span>Hạn mức</span>
+            <span>{t.quotaBtnLabel}</span>
             <svg {...iconProps} width={13} height={13}>
               <path d="m6 9 6 6 6-6" />
             </svg>
           </button>
 
           {popoverOpen && (
-            <div className="rs-topbar-popover" role="dialog" aria-label="Hạn mức và trạng thái">
+            <div className="rs-topbar-popover" role="dialog" aria-label={t.quotaDialogAria}>
               <div className="rs-popover-header">
-                <span className="rs-popover-title">Hạn mức YouTube hôm nay</span>
-                <span className="rs-popover-meta">Reset 00:00 PT</span>
+                <span className="rs-popover-title">{t.quotaTitle}</span>
+                <span className="rs-popover-meta" title={t.resetHintTitle}>
+                  {t.resetHint}
+                </span>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                 <div>
                   <div className="rs-popover-kv-row" style={{ marginBottom: 4 }}>
-                    <span>Tìm kiếm</span>
+                    <span>{t.quotaSearch}</span>
                     <strong className="rs-tabular">
                       {quotaStatus.searchQueries.used} / {quotaStatus.searchQueries.limit}
                     </strong>
@@ -308,10 +292,10 @@ export const TopBar: React.FC = () => {
 
                 <div>
                   <div className="rs-popover-kv-row" style={{ marginBottom: 4 }}>
-                    <span>Dữ liệu</span>
+                    <span>{t.quotaData}</span>
                     <strong className="rs-tabular">
-                      {quotaStatus.generalData.used.toLocaleString('vi-VN')} /{' '}
-                      {quotaStatus.generalData.limit.toLocaleString('vi-VN')}
+                      {quotaStatus.generalData.used.toLocaleString(locale)} /{' '}
+                      {quotaStatus.generalData.limit.toLocaleString(locale)}
                     </strong>
                   </div>
                   <div className="rs-progress-track">
@@ -327,22 +311,22 @@ export const TopBar: React.FC = () => {
 
               <div className="rs-popover-kv">
                 <div className="rs-popover-kv-row">
-                  <span>Kết nối cục bộ</span>
-                  <strong>{isBootstrapping ? 'Đang kiểm tra' : backendOnline ? 'Đang hoạt động' : 'Mất kết nối'}</strong>
+                  <span>{t.localConnection}</span>
+                  <strong>{isBootstrapping ? t.statusChecking : backendOnline ? t.statusActive : t.statusOffline}</strong>
                 </div>
                 <div className="rs-popover-kv-row">
-                  <span>YouTube API Key</span>
+                  <span>{t.apiKeyLabel}</span>
                   <strong>
                     {systemSettings.apiKeyStatus === 'configured'
-                      ? `Đã cấu hình (${systemSettings.maskedApiKey ?? 'ẩn'})`
+                      ? t.apiKeyConfigured(systemSettings.maskedApiKey ?? '***')
                       : systemSettings.apiKeyStatus === 'unreadable'
-                        ? 'Lỗi đọc khóa'
-                        : 'Chưa thiết lập'}
+                        ? t.apiKeyError
+                        : t.apiKeyMissing}
                   </strong>
                 </div>
                 <div className="rs-popover-kv-row">
-                  <span>Điều khoản YouTube</span>
-                  <strong>{systemSettings.legalConsentAccepted ? 'Đã xác nhận' : 'Chưa xác nhận'}</strong>
+                  <span>{t.youtubeTermsLabel}</span>
+                  <strong>{systemSettings.legalConsentAccepted ? t.termsAccepted : t.termsNotAccepted}</strong>
                 </div>
               </div>
 
@@ -356,7 +340,7 @@ export const TopBar: React.FC = () => {
                     navigate('system-settings');
                   }}
                 >
-                  Mở Cài đặt
+                  {t.settingsBtn}
                 </button>
                 {!systemSettings.legalConsentAccepted && (
                   <button
@@ -367,7 +351,7 @@ export const TopBar: React.FC = () => {
                       setLegalModalOpen(true);
                     }}
                   >
-                    Xác nhận điều khoản
+                    {t.acceptTermsBtn}
                   </button>
                 )}
               </div>
@@ -375,12 +359,31 @@ export const TopBar: React.FC = () => {
           )}
         </div>
 
+        <label className="rs-topbar-lang" title={t.languageAria}>
+          <svg {...iconProps} width={14} height={14}>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M3.6 9h16.8" />
+            <path d="M3.6 15h16.8" />
+            <path d="M12 3a14.5 14.5 0 0 0 0 18" />
+            <path d="M12 3a14.5 14.5 0 0 1 0 18" />
+          </svg>
+          <select
+            aria-label={t.languageAria}
+            className="rs-topbar-lang-select"
+            value={uiLanguage}
+            onChange={(e) => setUiLanguage(e.target.value as UiLanguage)}
+          >
+            <option value="vi">Tiếng Việt</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+
         <button
           type="button"
           className="rs-btn rs-btn-secondary rs-btn-icon"
           onClick={toggleTheme}
-          title={theme === 'light' ? 'Chuyển sang Dark Mode' : 'Chuyển sang Light Mode'}
-          aria-label={theme === 'light' ? 'Chuyển sang Dark Mode' : 'Chuyển sang Light Mode'}
+          title={theme === 'light' ? t.switchToDark : t.switchToLight}
+          aria-label={theme === 'light' ? t.switchToDark : t.switchToLight}
         >
           {theme === 'light' ? (
             <svg {...iconProps}>
@@ -405,8 +408,8 @@ export const TopBar: React.FC = () => {
           type="button"
           className="rs-btn rs-btn-secondary rs-btn-icon"
           onClick={() => navigate('system-settings')}
-          title="Cài đặt"
-          aria-label="Cài đặt"
+          title={t.settingsBtn}
+          aria-label={t.settingsBtn}
         >
           <svg {...iconProps}>
             <circle cx="12" cy="12" r="3" />
