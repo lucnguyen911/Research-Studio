@@ -3,6 +3,9 @@ import { getTranslations } from '../i18n/translations';
 import type { NavHistoryEntry, RouteParams, ScreenId, ViewFilterState } from '../prototype/types';
 
 const STORAGE_KEY = 'rs_nav_stack_v1';
+const LAST_PROJECT_STORAGE_KEY = 'rs_last_project_id';
+
+export type NavArea = 'global' | 'project';
 
 export const DEFAULT_VIEW_STATE: ViewFilterState = {
   search: '',
@@ -64,6 +67,55 @@ function isProjectScopedScreen(screenId: ScreenId): boolean {
   return screenId.startsWith('project-');
 }
 
+function isDetailScreen(screenId: ScreenId): boolean {
+  return (
+    screenId === 'channel-detail' ||
+    screenId === 'video-detail' ||
+    screenId === 'article-detail' ||
+    screenId === 'idea-detail'
+  );
+}
+
+function readLastProjectId(): string | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    return localStorage.getItem(LAST_PROJECT_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastProjectId(projectId: string | null): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (projectId) {
+      localStorage.setItem(LAST_PROJECT_STORAGE_KEY, projectId);
+    } else {
+      localStorage.removeItem(LAST_PROJECT_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+export function resolveActiveNavArea(entries: NavHistoryEntry[], index: number): NavArea {
+  const safeIndex = Math.max(0, Math.min(index, entries.length - 1));
+  for (let i = safeIndex; i >= 0; i -= 1) {
+    const entry = entries[i];
+    if (!entry) continue;
+    if (entry.screenId.startsWith('global-')) return 'global';
+    if (entry.screenId.startsWith('project-')) return 'project';
+    const fromScreen = entry.params.fromScreen;
+    if (fromScreen) {
+      if (fromScreen.startsWith('project-') || fromScreen === 'channel-detail') return 'project';
+      if (fromScreen.startsWith('global-') || fromScreen === 'article-detail') return 'global';
+    }
+    if (entry.screenId === 'channel-detail') return 'project';
+    if (entry.screenId === 'article-detail') return 'global';
+  }
+  return 'global';
+}
+
 function makeEntryId(): string {
   return `nav-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -78,6 +130,7 @@ function buildHash(entry: NavHistoryEntry): string {
   if (entry.params.videoId) query.set('vid', entry.params.videoId);
   if (entry.params.articleId) query.set('aid', entry.params.articleId);
   if (entry.params.ideaId) query.set('iid', entry.params.ideaId);
+  if (entry.params.fromScreen) query.set('from', entry.params.fromScreen);
   const qs = query.toString();
   return `#/${slug}${qs ? `?${qs}` : ''}`;
 }
@@ -87,7 +140,10 @@ function parseHashToFallbackEntry(defaultProjectId: string | null): NavHistoryEn
   const [pathPart, qsPart] = rawHash.split('?');
   const qs = new URLSearchParams(qsPart || '');
   const matchedScreen = ALL_SCREEN_IDS.find((id) => SCREEN_HASH_MAP[id] === pathPart) ?? 'global-overview';
-  const pid = qs.get('pid') || defaultProjectId;
+  const pid = qs.get('pid') || defaultProjectId || readLastProjectId();
+  const rawFrom = qs.get('from');
+  const fromScreen =
+    rawFrom && ALL_SCREEN_IDS.includes(rawFrom as ScreenId) ? (rawFrom as ScreenId) : undefined;
   return {
     entryId: makeEntryId(),
     screenId: matchedScreen,
@@ -97,6 +153,7 @@ function parseHashToFallbackEntry(defaultProjectId: string | null): NavHistoryEn
       videoId: qs.get('vid') || undefined,
       articleId: qs.get('aid') || undefined,
       ideaId: qs.get('iid') || undefined,
+      fromScreen,
     },
     viewState: { ...DEFAULT_VIEW_STATE },
   };
@@ -235,11 +292,21 @@ export function navigateTo(
   if (nextProjectId !== current.projectId) {
     abortActiveProjectRequests();
   }
+  if (nextProjectId) {
+    writeLastProjectId(nextProjectId);
+  }
+  const nextParams: RouteParams = options?.params ? { ...options.params } : {};
+  if (isDetailScreen(screenId) && !nextParams.fromScreen) {
+    nextParams.fromScreen =
+      !isDetailScreen(current.screenId) && current.screenId !== 'system-settings'
+        ? current.screenId
+        : current.params.fromScreen;
+  }
   const nextEntry: NavHistoryEntry = {
     entryId: makeEntryId(),
     screenId,
     projectId: nextProjectId,
-    params: options?.params ? { ...options.params } : {},
+    params: nextParams,
     viewState: {
       ...DEFAULT_VIEW_STATE,
       ...(options?.viewState ?? {}),
@@ -307,9 +374,12 @@ export function reconcileValidProjects(
   const current = navState.entries[navState.index];
 
   if (!current.projectId && validProjectIds.length > 0) {
+    const savedPid = readLastProjectId();
+    const pickedId = savedPid && validProjectIds.includes(savedPid) ? savedPid : validProjectIds[0];
+    writeLastProjectId(pickedId);
     const nextEntry: NavHistoryEntry = {
       ...current,
-      projectId: validProjectIds[0],
+      projectId: pickedId,
     };
     const nextEntries = [...navState.entries];
     nextEntries[navState.index] = nextEntry;
@@ -324,6 +394,7 @@ export function reconcileValidProjects(
   if (current.projectId && !validProjectIds.includes(current.projectId)) {
     abortActiveProjectRequests();
     const fallbackId = validProjectIds[0] ?? null;
+    writeLastProjectId(fallbackId);
     const isDetailFromProject = current.screenId === 'channel-detail';
     const nextScreen: ScreenId =
       isProjectScopedScreen(current.screenId) || isDetailFromProject
@@ -359,6 +430,7 @@ export function reconcileValidProjects(
 
 export interface AppNavigationContextValue {
   currentEntry: NavHistoryEntry;
+  activeArea: NavArea;
   canGoBack: boolean;
   canGoForward: boolean;
   historyPosition: string;

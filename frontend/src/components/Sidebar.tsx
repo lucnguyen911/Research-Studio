@@ -4,8 +4,7 @@ import type { GlobalScreenId, ProjectScreenId, ScreenId } from '../prototype/typ
 import { useAppNavigation } from '../state/navigationStore';
 import { usePrototypeWorkspace } from '../state/workspaceContext';
 
-const GLOBAL_MENU: Array<{ id: GlobalScreenId; stage2?: boolean }> = [
-  { id: 'global-overview' },
+const GLOBAL_CHILD_MENU: Array<{ id: GlobalScreenId; stage2?: boolean }> = [
   { id: 'global-trends' },
   { id: 'global-search' },
   { id: 'global-featured-stage2', stage2: true },
@@ -13,8 +12,7 @@ const GLOBAL_MENU: Array<{ id: GlobalScreenId; stage2?: boolean }> = [
   { id: 'global-ideas' },
 ];
 
-const PROJECT_MENU: Array<{ id: ProjectScreenId; stage2?: boolean }> = [
-  { id: 'project-overview' },
+const PROJECT_CHILD_MENU: Array<{ id: ProjectScreenId; stage2?: boolean }> = [
   { id: 'project-hot-topics-stage2', stage2: true },
   { id: 'project-keywords' },
   { id: 'project-breakout' },
@@ -26,16 +24,26 @@ const PROJECT_MENU: Array<{ id: ProjectScreenId; stage2?: boolean }> = [
   { id: 'project-settings' },
 ];
 
+const GLOBAL_CHILD_IDS = new Set<ScreenId>(GLOBAL_CHILD_MENU.map((item) => item.id));
+const PROJECT_CHILD_IDS = new Set<ScreenId>(PROJECT_CHILD_MENU.map((item) => item.id));
+
 type NavIconId = ScreenId | 'collapse-left' | 'collapse-right' | 'plus';
 
-const SidebarIcon: React.FC<{ id: NavIconId; size?: number }> = ({ id, size = 16 }) => {
+const PlatformYouTubeIcon: React.FC = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect x="2" y="4.5" width="20" height="15" rx="4.2" fill="#DC2626" />
+    <path d="M10 9l5.5 3-5.5 3V9Z" fill="#FFFFFF" />
+  </svg>
+);
+
+const SidebarIcon: React.FC<{ id: NavIconId; size?: number }> = ({ id, size = 15 }) => {
   const common = {
     width: size,
     height: size,
     viewBox: '0 0 24 24',
     fill: 'none',
     stroke: 'currentColor',
-    strokeWidth: 1.75,
+    strokeWidth: 1.85,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
     'aria-hidden': true,
@@ -192,21 +200,35 @@ const SidebarIcon: React.FC<{ id: NavIconId; size?: number }> = ({ id, size = 16
 };
 
 export const Sidebar: React.FC = () => {
-  const { currentEntry, navigate, switchProject } = useAppNavigation();
+  const { currentEntry, activeArea, navigate, switchProject } = useAppNavigation();
   const { uiLanguage, projects, sidebarCollapsed, toggleSidebar, setCreateProjectModalOpen } =
     usePrototypeWorkspace();
   const t = getTranslations(uiLanguage).sidebar;
 
   const activeProjectId = currentEntry.projectId ?? projects[0]?.id ?? '';
 
+  const activeChildScreenId: ScreenId | null = (() => {
+    const sid = currentEntry.screenId;
+    if (activeArea === 'global' && GLOBAL_CHILD_IDS.has(sid)) return sid;
+    if (activeArea === 'project' && PROJECT_CHILD_IDS.has(sid)) return sid;
+    const from = currentEntry.params.fromScreen;
+    if (activeArea === 'global' && from && GLOBAL_CHILD_IDS.has(from)) return from;
+    if (activeArea === 'project' && from && PROJECT_CHILD_IDS.has(from)) return from;
+    if (sid === 'channel-detail' || sid === 'video-detail') return 'project-competitors';
+    if (sid === 'article-detail') return 'global-news';
+    if (sid === 'idea-detail') return activeArea === 'project' ? 'project-ideas' : 'global-ideas';
+    return null;
+  })();
+
   const renderGlobalBtn = (item: { id: GlobalScreenId; stage2?: boolean }) => {
     const label = t.globalMenu[item.id];
-    const isActive = currentEntry.screenId === item.id;
+    const isActive = activeChildScreenId === item.id;
     return (
       <button
         key={item.id}
         type="button"
         onClick={() => navigate(item.id)}
+        aria-current={isActive ? 'page' : undefined}
         title={sidebarCollapsed ? `${label}${item.stage2 ? ` — ${t.stage2Title}` : ''}` : undefined}
         className={`rs-nav-item ${isActive ? 'is-active' : ''} ${item.stage2 ? 'is-stage2' : ''}`}
       >
@@ -225,12 +247,13 @@ export const Sidebar: React.FC = () => {
 
   const renderProjectBtn = (item: { id: ProjectScreenId; stage2?: boolean }) => {
     const label = t.projectMenu[item.id];
-    const isActive = currentEntry.screenId === item.id;
+    const isActive = activeChildScreenId === item.id;
     return (
       <button
         key={item.id}
         type="button"
         onClick={() => navigate(item.id)}
+        aria-current={isActive ? 'page' : undefined}
         title={sidebarCollapsed ? `${label}${item.stage2 ? ` — ${t.stage2Title}` : ''}` : undefined}
         className={`rs-nav-item ${isActive ? 'is-active' : ''} ${item.stage2 ? 'is-stage2' : ''}`}
       >
@@ -249,82 +272,192 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside className={`rs-sidebar ${sidebarCollapsed ? 'is-collapsed' : ''}`} aria-label={t.mainNavAria}>
-      <div className="rs-brand">
-        <div className="rs-brand-left">
-          <div className="rs-brand-logo" aria-hidden="true">
-            RS
+      <div className="rs-sidebar-top">
+        {sidebarCollapsed ? (
+          <div
+            className="rs-platform-collapsed"
+            title={t.platformTooltip(t.platforms.youtube)}
+            aria-label={t.platformTooltip(t.platforms.youtube)}
+          >
+            <PlatformYouTubeIcon />
           </div>
-          {!sidebarCollapsed && <div className="rs-brand-title">Research Studio</div>}
-        </div>
+        ) : (
+          <div className="rs-platform-box">
+            <span className="rs-platform-icon" aria-hidden="true">
+              <PlatformYouTubeIcon />
+            </span>
+            <select
+              id="rs-platform-select"
+              aria-label={t.selectPlatformAria}
+              className="rs-select rs-select-compact rs-platform-select"
+              value="youtube"
+              onChange={() => undefined}
+            >
+              <option value="youtube">{t.platforms.youtube}</option>
+              <option value="tiktok" disabled>
+                {t.platforms.tiktokSoon}
+              </option>
+              <option value="facebook" disabled>
+                {t.platforms.facebookSoon}
+              </option>
+              <option value="instagram" disabled>
+                {t.platforms.instagramSoon}
+              </option>
+              <option value="x" disabled>
+                {t.platforms.xSoon}
+              </option>
+            </select>
+          </div>
+        )}
+
+        {sidebarCollapsed ? (
+          <nav className="rs-nav-list" aria-label={t.areaAria}>
+            <button
+              type="button"
+              onClick={() => navigate('global-overview')}
+              title={t.overviewAreaTitle}
+              aria-label={t.overviewArea}
+              aria-current={currentEntry.screenId === 'global-overview' ? 'page' : undefined}
+              className={`rs-nav-item ${
+                currentEntry.screenId === 'global-overview'
+                  ? 'is-active'
+                  : activeArea === 'global'
+                    ? 'is-area-active'
+                    : ''
+              }`}
+            >
+              <span className="rs-nav-icon">
+                <SidebarIcon id="global-overview" />
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('project-overview')}
+              title={t.projectAreaTitle}
+              aria-label={t.projectArea}
+              aria-current={currentEntry.screenId === 'project-overview' ? 'page' : undefined}
+              className={`rs-nav-item ${
+                currentEntry.screenId === 'project-overview'
+                  ? 'is-active'
+                  : activeArea === 'project'
+                    ? 'is-area-active'
+                    : ''
+              }`}
+            >
+              <span className="rs-nav-icon">
+                <SidebarIcon id="project-overview" />
+              </span>
+            </button>
+          </nav>
+        ) : (
+          <nav className="rs-area-switcher" aria-label={t.areaAria}>
+            <button
+              type="button"
+              onClick={() => navigate('global-overview')}
+              title={t.overviewAreaTitle}
+              aria-current={currentEntry.screenId === 'global-overview' ? 'page' : undefined}
+              className={`rs-area-tab ${activeArea === 'global' ? 'is-selected' : ''} ${
+                currentEntry.screenId === 'global-overview' ? 'is-exact' : ''
+              }`}
+            >
+              {t.overviewArea}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('project-overview')}
+              title={t.projectAreaTitle}
+              aria-current={currentEntry.screenId === 'project-overview' ? 'page' : undefined}
+              className={`rs-area-tab ${activeArea === 'project' ? 'is-selected' : ''} ${
+                currentEntry.screenId === 'project-overview' ? 'is-exact' : ''
+              }`}
+            >
+              {t.projectArea}
+            </button>
+          </nav>
+        )}
       </div>
 
       <div className="rs-sidebar-scroll">
-        <div>
-          {!sidebarCollapsed && <div className="rs-nav-section-title">{t.globalSection}</div>}
-          <nav className="rs-nav-list" aria-label={t.globalSection}>
-            {GLOBAL_MENU.map(renderGlobalBtn)}
+        {activeArea === 'global' ? (
+          <nav className="rs-nav-list" aria-label={t.overviewArea}>
+            {GLOBAL_CHILD_MENU.map(renderGlobalBtn)}
           </nav>
-        </div>
-
-        <div className="rs-sidebar-divider" />
-
-        <div>
-          {!sidebarCollapsed && <div className="rs-nav-section-title">{t.projectSection}</div>}
-          {!sidebarCollapsed && (
-            <div className="rs-project-switcher">
-              <select
-                id="rs-project-select"
-                aria-label={t.selectProjectAria}
-                className="rs-select rs-select-compact"
-                value={activeProjectId}
-                disabled={projects.length === 0}
-                onChange={(e) => switchProject(e.target.value)}
-              >
-                {projects.length === 0 ? (
-                  <option value="">{t.noProjectsOption}</option>
-                ) : (
-                  projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))
-                )}
-              </select>
+        ) : (
+          <>
+            {sidebarCollapsed ? (
               <button
                 type="button"
-                className="rs-btn rs-btn-secondary rs-btn-icon rs-project-add-btn"
+                className="rs-nav-item"
                 onClick={() => setCreateProjectModalOpen(true)}
                 title={t.createProjectTitle}
                 aria-label={t.createProjectTitle}
               >
-                <SidebarIcon id="plus" size={14} />
+                <span className="rs-nav-icon">
+                  <SidebarIcon id="plus" size={15} />
+                </span>
               </button>
-            </div>
-          )}
+            ) : (
+              <div className="rs-project-switcher">
+                <select
+                  id="rs-project-select"
+                  aria-label={t.selectProjectAria}
+                  className="rs-select rs-select-compact"
+                  value={activeProjectId}
+                  disabled={projects.length === 0}
+                  onChange={(e) => switchProject(e.target.value)}
+                >
+                  {projects.length === 0 ? (
+                    <option value="">{t.noProjectsOption}</option>
+                  ) : (
+                    projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <button
+                  type="button"
+                  className="rs-btn rs-btn-secondary rs-btn-icon rs-project-add-btn"
+                  onClick={() => setCreateProjectModalOpen(true)}
+                  title={t.createProjectTitle}
+                  aria-label={t.createProjectTitle}
+                >
+                  <SidebarIcon id="plus" size={14} />
+                </button>
+              </div>
+            )}
 
-          <nav className="rs-nav-list" aria-label={t.projectSection}>
-            {PROJECT_MENU.map(renderProjectBtn)}
-          </nav>
-        </div>
+            <nav className="rs-nav-list" aria-label={t.projectArea}>
+              {PROJECT_CHILD_MENU.map(renderProjectBtn)}
+            </nav>
+          </>
+        )}
+
+        <div className="rs-sidebar-gradient-divider" />
+
+        <nav className="rs-nav-list" aria-label={t.settingsTitle}>
+          <button
+            type="button"
+            className={`rs-nav-item ${currentEntry.screenId === 'system-settings' ? 'is-active' : ''}`}
+            onClick={() => navigate('system-settings')}
+            aria-current={currentEntry.screenId === 'system-settings' ? 'page' : undefined}
+            title={sidebarCollapsed ? t.settingsLabel : t.settingsTitle}
+          >
+            <span className="rs-nav-icon">
+              <SidebarIcon id="system-settings" />
+            </span>
+            {!sidebarCollapsed && <span className="rs-nav-label">{t.settingsLabel}</span>}
+          </button>
+        </nav>
+
+        <div className="rs-sidebar-spacer" />
       </div>
 
-      <div className="rs-sidebar-footer">
+      <div className="rs-sidebar-collapse-row">
         <button
           type="button"
-          className={`rs-nav-item ${currentEntry.screenId === 'system-settings' ? 'is-active' : ''}`}
-          style={{ flex: 1 }}
-          onClick={() => navigate('system-settings')}
-          title={sidebarCollapsed ? t.settingsLabel : t.settingsTitle}
-        >
-          <span className="rs-nav-icon">
-            <SidebarIcon id="system-settings" />
-          </span>
-          {!sidebarCollapsed && <span className="rs-nav-label">{t.settingsLabel}</span>}
-        </button>
-
-        <button
-          type="button"
-          className="rs-btn rs-btn-secondary rs-btn-icon"
+          className="rs-collapse-btn"
           onClick={toggleSidebar}
           title={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
           aria-label={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}

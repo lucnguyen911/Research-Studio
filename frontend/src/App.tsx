@@ -5,7 +5,7 @@ import { AppNavigationProvider } from './state/AppNavigationProvider';
 import { usePrototypeWorkspace } from './state/workspaceContext';
 import { PrototypeWorkspaceProvider } from './state/PrototypeWorkspaceContext';
 import { Sidebar } from './components/Sidebar';
-import { TopBar } from './components/TopBar';
+import { TopBar, WorkspaceContextBar } from './components/TopBar';
 import { StageTwoScreen } from './components/StatusViews';
 import {
   CreateProjectModal,
@@ -110,19 +110,24 @@ const WorkspaceShell: React.FC = () => {
 
   return (
     <div className="rs-shell">
-      <Sidebar />
-      <div className="rs-main-col">
-        <TopBar />
-        <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-          <main
-            id="rs-main-scroll"
-            ref={scrollRef}
-            className="rs-content-scroll"
-            onScroll={handleScroll}
-          >
-            <ScreenOutlet />
-          </main>
-          <VideoInspectorDrawer />
+      <TopBar />
+      <div className="rs-shell-body">
+        <Sidebar />
+        <div className="rs-workspace-chassis">
+          <div className="rs-workspace-frame">
+            <WorkspaceContextBar />
+            <div className="rs-workspace-inner">
+              <main
+                id="rs-main-scroll"
+                ref={scrollRef}
+                className="rs-content-scroll"
+                onScroll={handleScroll}
+              >
+                <ScreenOutlet />
+              </main>
+              <VideoInspectorDrawer />
+            </div>
+          </div>
         </div>
       </div>
 

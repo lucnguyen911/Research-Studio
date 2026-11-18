@@ -7,9 +7,9 @@
   --rs-radius-lg: 12px;
   --rs-radius-pill: 9999px;
 
-  --rs-sidebar-width: 268px;
+  --rs-sidebar-width: 240px;
   --rs-sidebar-collapsed: 64px;
-  --rs-topbar-height: 52px;
+  --rs-topbar-height: 46px;
 }
 
 /* Light Mode — Default (VOXLAB Tactile Luxury Studio: Travertine Cream, Ivory & Amber) */
@@ -43,6 +43,20 @@ html.light,
 
   --rs-btn-secondary-bg: linear-gradient(180deg, #FFFFFF 0%, #FCF9F4 58%, #F1E9DD 100%);
   --rs-btn-secondary-border: #C9B79E;
+
+  --rs-topbar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, #F7F3EC 100%);
+  --rs-topbar-shadow: 0 1px 2px rgba(28, 19, 10, 0.04);
+  --rs-capsule-bg: linear-gradient(180deg, #FFFFFF 0%, #FCF9F4 58%, #F1E9DD 100%);
+  --rs-capsule-border: #C9B79E;
+  --rs-capsule-hover-border: #B69A76;
+  --rs-capsule-shadow: inset 0 1px 0 #FFFFFF, 0 1px 2px rgba(28, 19, 10, 0.08);
+  --rs-wordmark-grad: linear-gradient(90deg, #451A03 0%, #B45309 52%, #EA580C 100%);
+  --rs-logo-bg: linear-gradient(180deg, #291E15 0%, #18110B 100%);
+  --rs-logo-border: rgba(217, 119, 6, 0.45);
+  --rs-logo-color: #FBBF24;
+  --rs-frame-shadow: 0 4px 20px -4px rgba(36, 24, 12, 0.08), 0 1px 2px rgba(36, 24, 12, 0.04);
+  --rs-nav-active-ring: #D2BFA4;
+  --rs-nav-icon-active-grad: linear-gradient(180deg, #FBBF24 0%, #F59E0B 56%, #D97706 100%);
 
   --rs-success-text: #047857;
   --rs-success-bg: #D1FAE5;
@@ -96,6 +110,20 @@ html.dark,
 
   --rs-btn-secondary-bg: linear-gradient(180deg, #31271F 0%, #251D17 58%, #1D1712 100%);
   --rs-btn-secondary-border: #4F3E30;
+
+  --rs-topbar-bg: linear-gradient(180deg, #1B1510 0%, #130F0C 100%);
+  --rs-topbar-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --rs-capsule-bg: linear-gradient(180deg, #31271F 0%, #251D17 58%, #1D1712 100%);
+  --rs-capsule-border: #4F3E30;
+  --rs-capsule-hover-border: #6B533E;
+  --rs-capsule-shadow: inset 0 1px 0 rgba(255, 244, 224, 0.10), 0 1px 2px rgba(0, 0, 0, 0.5);
+  --rs-wordmark-grad: linear-gradient(90deg, #FEF3C7 0%, #FCD34D 52%, #FB923C 100%);
+  --rs-logo-bg: linear-gradient(180deg, #2D2218 0%, #1A130D 100%);
+  --rs-logo-border: rgba(251, 191, 36, 0.36);
+  --rs-logo-color: #FBBF24;
+  --rs-frame-shadow: 0 10px 28px -6px rgba(0, 0, 0, 0.58), 0 2px 4px rgba(0, 0, 0, 0.35);
+  --rs-nav-active-ring: rgba(245, 158, 11, 0.38);
+  --rs-nav-icon-active-grad: linear-gradient(180deg, #FBBF24 0%, #F59E0B 56%, #D97706 100%);
 
   --rs-success-text: #6EE7B7;
   --rs-success-bg: rgba(16, 185, 129, 0.16);

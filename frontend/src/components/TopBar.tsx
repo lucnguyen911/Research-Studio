@@ -17,7 +17,7 @@ const iconProps = {
 };
 
 export const TopBar: React.FC = () => {
-  const { currentEntry, canGoBack, canGoForward, goBack, goForward, navigate } = useAppNavigation();
+  const { navigate } = useAppNavigation();
   const {
     uiLanguage,
     setUiLanguage,
@@ -27,9 +27,6 @@ export const TopBar: React.FC = () => {
     isBootstrapping,
     systemSettings,
     quotaStatus,
-    projects,
-    cachedVideosById,
-    ideas,
     refreshWorkspaceStatus,
     setLegalModalOpen,
   } = usePrototypeWorkspace();
@@ -60,107 +57,37 @@ export const TopBar: React.FC = () => {
     };
   }, [popoverOpen]);
 
-  const activeProject = projects.find((p) => p.id === currentEntry.projectId) ?? projects[0] ?? null;
-  const isPreview = isDemoPreviewScreen(currentEntry.screenId);
-
-  const buildCrumbs = (): Array<{ label: string; onClick?: () => void }> => {
-    const sid = currentEntry.screenId;
-    if (sid.startsWith('global-')) {
-      return [
-        { label: t.globalCrumb, onClick: () => navigate('global-overview') },
-        { label: t.screenTitles[sid] },
-      ];
-    }
-    if (sid.startsWith('project-')) {
-      return [
-        {
-          label: activeProject ? activeProject.name : t.projectFallbackCrumb,
-          onClick: () => navigate('project-overview'),
-        },
-        { label: t.screenTitles[sid] },
-      ];
-    }
-    if (sid === 'channel-detail') {
-      const chId = currentEntry.params.channelId;
-      const sampleVid = chId ? Object.values(cachedVideosById).find((v) => v.channelId === chId) : undefined;
-      return [
-        { label: activeProject ? activeProject.name : t.projectFallbackCrumb, onClick: () => navigate('project-overview') },
-        { label: t.competitorsCrumb, onClick: () => navigate('project-competitors') },
-        { label: sampleVid?.channelTitle ?? chId ?? t.channelCrumb },
-      ];
-    }
-    if (sid === 'video-detail') {
-      const vid = currentEntry.params.videoId ? cachedVideosById[currentEntry.params.videoId] : undefined;
-      const fromChId = currentEntry.params.fromChannelId ?? vid?.channelId;
-      const crumbs: Array<{ label: string; onClick?: () => void }> = [];
-      if (currentEntry.params.fromScreen === 'global-trends' || currentEntry.params.fromScreen === 'global-search') {
-        crumbs.push({
-          label: t.screenTitles[currentEntry.params.fromScreen],
-          onClick: () => navigate(currentEntry.params.fromScreen!),
-        });
-      } else {
-        crumbs.push({
-          label: t.competitorsCrumb,
-          onClick: () => navigate('project-competitors'),
-        });
-        if (fromChId) {
-          crumbs.push({
-            label: vid?.channelTitle || t.channelCrumb,
-            onClick: () => navigate('channel-detail', { params: { channelId: fromChId } }),
-          });
-        }
-      }
-      crumbs.push({ label: vid?.title || t.videoCrumb });
-      return crumbs;
-    }
-    if (sid === 'article-detail') {
-      return [
-        { label: t.rssCrumb, onClick: () => navigate('global-news') },
-        { label: t.screenTitles[sid] },
-      ];
-    }
-    if (sid === 'idea-detail') {
-      const idea = ideas.find((i) => i.id === currentEntry.params.ideaId);
-      return [
-        { label: t.ideasCrumb, onClick: () => navigate('global-ideas') },
-        { label: idea?.title ?? t.ideaCrumb },
-      ];
-    }
-    return [{ label: t.systemCrumb }, { label: t.screenTitles[sid] }];
-  };
-
-  const crumbs = buildCrumbs();
-
   const quotaExhausted = quotaStatus.searchQueries.exhausted || quotaStatus.generalData.exhausted;
   const quotaWarning = quotaStatus.searchQueries.warning || quotaStatus.generalData.warning;
 
-  const urgentAlert = !isBootstrapping && !backendOnline
-    ? {
-        label: t.alerts.offline,
-        danger: true,
-        onClick: () => {
-          void refreshWorkspaceStatus();
-        },
-      }
-    : systemSettings.apiKeyStatus === 'unreadable'
+  const urgentAlert =
+    !isBootstrapping && !backendOnline
       ? {
-          label: t.alerts.apiKeyError,
+          label: t.alerts.offline,
           danger: true,
-          onClick: () => navigate('system-settings'),
+          onClick: () => {
+            void refreshWorkspaceStatus();
+          },
         }
-      : quotaExhausted
+      : systemSettings.apiKeyStatus === 'unreadable'
         ? {
-            label: t.alerts.quotaExhausted,
+            label: t.alerts.apiKeyError,
             danger: true,
-            onClick: () => setPopoverOpen((v) => !v),
+            onClick: () => navigate('system-settings'),
           }
-        : quotaWarning
+        : quotaExhausted
           ? {
-              label: t.alerts.quotaWarning,
-              danger: false,
+              label: t.alerts.quotaExhausted,
+              danger: true,
               onClick: () => setPopoverOpen((v) => !v),
             }
-          : null;
+          : quotaWarning
+            ? {
+                label: t.alerts.quotaWarning,
+                danger: false,
+                onClick: () => setPopoverOpen((v) => !v),
+              }
+            : null;
 
   const dotClass =
     (!isBootstrapping && !backendOnline) || systemSettings.apiKeyStatus === 'unreadable' || quotaExhausted
@@ -182,61 +109,28 @@ export const TopBar: React.FC = () => {
       : 0,
   );
 
+  const currentLanguageLabel = uiLanguage === 'en' ? 'English' : 'Tiếng Việt';
+
   return (
     <header className="rs-topbar">
-      <div className="rs-topbar-left">
-        <div className="rs-nav-btn-group">
-          <button
-            type="button"
-            className="rs-btn rs-btn-secondary rs-btn-icon"
-            disabled={!canGoBack}
-            onClick={goBack}
-            title={t.backTitle}
-            aria-label={t.backLabel}
-          >
-            <svg {...iconProps}>
-              <path d="M19 12H5" />
-              <path d="m12 19-7-7 7-7" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="rs-btn rs-btn-secondary rs-btn-icon"
-            disabled={!canGoForward}
-            onClick={goForward}
-            title={t.forwardTitle}
-            aria-label={t.forwardLabel}
-          >
-            <svg {...iconProps}>
-              <path d="M5 12h14" />
-              <path d="m12 5 7 7-7 7" />
-            </svg>
-          </button>
-        </div>
+      <button
+        type="button"
+        className="rs-brand-btn"
+        onClick={() => navigate('global-overview')}
+        title={t.brandHomeTitle}
+      >
+        <span className="rs-vox-logo" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <rect x="3.5" y="4.5" width="7" height="6.5" rx="1.6" fill="currentColor" opacity="0.95" />
+            <rect x="13.5" y="4.5" width="7" height="6.5" rx="1.6" fill="currentColor" opacity="0.6" />
+            <rect x="3.5" y="13.5" width="7" height="6.5" rx="1.6" fill="currentColor" opacity="0.6" />
+            <path d="M13.5 14.5l7 2.8-7 2.7v-5.5Z" fill="currentColor" />
+          </svg>
+        </span>
+        <span className="rs-vox-wordmark">RESEARCH STUDIO</span>
+      </button>
 
-        <nav className="rs-breadcrumb" aria-label={t.breadcrumbAria}>
-          {crumbs.map((c, idx) => (
-            <React.Fragment key={`${c.label}-${idx}`}>
-              {idx > 0 && <span aria-hidden="true">/</span>}
-              {c.onClick ? (
-                <button type="button" className="rs-crumb-btn" onClick={c.onClick} title={c.label}>
-                  {c.label}
-                </button>
-              ) : (
-                <span className="rs-crumb-current" title={c.label}>
-                  {c.label}
-                </span>
-              )}
-            </React.Fragment>
-          ))}
-        </nav>
-
-        {isPreview && (
-          <span className="rs-tag-stage2" title={t.stage2BadgeTitle}>
-            {t.stage2Badge}
-          </span>
-        )}
-      </div>
+      <div className="rs-topbar-spacer" />
 
       <div className="rs-topbar-right">
         {urgentAlert && (
@@ -252,7 +146,7 @@ export const TopBar: React.FC = () => {
         <div className="rs-topbar-popover-wrap" ref={popoverWrapRef}>
           <button
             type="button"
-            className="rs-topbar-status-btn"
+            className="rs-topbar-capsule"
             aria-expanded={popoverOpen}
             aria-haspopup="dialog"
             onClick={() => setPopoverOpen((v) => !v)}
@@ -260,7 +154,7 @@ export const TopBar: React.FC = () => {
           >
             <span className={dotClass} aria-hidden="true" />
             <span>{t.quotaBtnLabel}</span>
-            <svg {...iconProps} width={13} height={13}>
+            <svg {...iconProps} width={13} height={13} className="rs-capsule-chevron">
               <path d="m6 9 6 6 6-6" />
             </svg>
           </button>
@@ -312,7 +206,9 @@ export const TopBar: React.FC = () => {
               <div className="rs-popover-kv">
                 <div className="rs-popover-kv-row">
                   <span>{t.localConnection}</span>
-                  <strong>{isBootstrapping ? t.statusChecking : backendOnline ? t.statusActive : t.statusOffline}</strong>
+                  <strong>
+                    {isBootstrapping ? t.statusChecking : backendOnline ? t.statusActive : t.statusOffline}
+                  </strong>
                 </div>
                 <div className="rs-popover-kv-row">
                   <span>{t.apiKeyLabel}</span>
@@ -359,34 +255,31 @@ export const TopBar: React.FC = () => {
           )}
         </div>
 
-        <label className="rs-topbar-lang" title={t.languageAria}>
-          <svg {...iconProps} width={14} height={14}>
-            <circle cx="12" cy="12" r="9" />
-            <path d="M3.6 9h16.8" />
-            <path d="M3.6 15h16.8" />
-            <path d="M12 3a14.5 14.5 0 0 0 0 18" />
-            <path d="M12 3a14.5 14.5 0 0 1 0 18" />
+        <div className="rs-vox-lang-capsule" title={t.languageAria}>
+          <span className="rs-vox-lang-label">{currentLanguageLabel}</span>
+          <svg {...iconProps} width={13} height={13} className="rs-capsule-chevron">
+            <path d="m6 9 6 6 6-6" />
           </svg>
           <select
             aria-label={t.languageAria}
-            className="rs-topbar-lang-select"
+            className="rs-vox-lang-select"
             value={uiLanguage}
             onChange={(e) => setUiLanguage(e.target.value as UiLanguage)}
           >
             <option value="vi">Tiếng Việt</option>
             <option value="en">English</option>
           </select>
-        </label>
+        </div>
 
         <button
           type="button"
-          className="rs-btn rs-btn-secondary rs-btn-icon"
+          className="rs-vox-icon-btn"
           onClick={toggleTheme}
           title={theme === 'light' ? t.switchToDark : t.switchToLight}
           aria-label={theme === 'light' ? t.switchToDark : t.switchToLight}
         >
           {theme === 'light' ? (
-            <svg {...iconProps}>
+            <svg {...iconProps} width={15} height={15}>
               <circle cx="12" cy="12" r="4" />
               <path d="M12 2v2" />
               <path d="M12 20v2" />
@@ -398,25 +291,210 @@ export const TopBar: React.FC = () => {
               <path d="m19.07 4.93-1.41 1.41" />
             </svg>
           ) : (
-            <svg {...iconProps}>
+            <svg {...iconProps} width={15} height={15}>
               <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
             </svg>
           )}
         </button>
-
-        <button
-          type="button"
-          className="rs-btn rs-btn-secondary rs-btn-icon"
-          onClick={() => navigate('system-settings')}
-          title={t.settingsBtn}
-          aria-label={t.settingsBtn}
-        >
-          <svg {...iconProps}>
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
-          </svg>
-        </button>
       </div>
     </header>
+  );
+};
+
+export const WorkspaceContextBar: React.FC = () => {
+  const { currentEntry, canGoBack, canGoForward, goBack, goForward, navigate } = useAppNavigation();
+  const { uiLanguage, projects, cachedVideosById, ideas } = usePrototypeWorkspace();
+  const t = getTranslations(uiLanguage).topbar;
+
+  const activeProject = projects.find((p) => p.id === currentEntry.projectId) ?? projects[0] ?? null;
+  const projectLabel = activeProject ? activeProject.name : t.projectFallbackCrumb;
+  const isPreview = isDemoPreviewScreen(currentEntry.screenId);
+
+  const buildCrumbs = (): Array<{ label: string; onClick?: () => void }> => {
+    const sid = currentEntry.screenId;
+    const fromScreen = currentEntry.params.fromScreen;
+
+    if (sid === 'global-overview') {
+      return [{ label: t.platformYoutubeCrumb }, { label: t.overviewAreaCrumb }];
+    }
+
+    if (sid.startsWith('global-')) {
+      return [
+        { label: t.platformYoutubeCrumb },
+        { label: t.overviewAreaCrumb, onClick: () => navigate('global-overview') },
+        { label: t.screenTitles[sid] },
+      ];
+    }
+
+    if (sid === 'project-overview') {
+      return [
+        { label: t.platformYoutubeCrumb },
+        { label: t.projectAreaCrumb },
+        { label: activeProject ? activeProject.name : t.screenTitles['project-overview'] },
+      ];
+    }
+
+    if (sid.startsWith('project-')) {
+      return [
+        { label: t.platformYoutubeCrumb },
+        { label: projectLabel, onClick: () => navigate('project-overview') },
+        { label: t.screenTitles[sid] },
+      ];
+    }
+
+    if (sid === 'channel-detail') {
+      const chId = currentEntry.params.channelId;
+      const sampleVid = chId ? Object.values(cachedVideosById).find((v) => v.channelId === chId) : undefined;
+      if (fromScreen && fromScreen.startsWith('global-')) {
+        return [
+          { label: t.platformYoutubeCrumb },
+          { label: t.overviewAreaCrumb, onClick: () => navigate('global-overview') },
+          { label: t.screenTitles[fromScreen], onClick: () => navigate(fromScreen) },
+          { label: sampleVid?.channelTitle ?? chId ?? t.channelCrumb },
+        ];
+      }
+      return [
+        { label: t.platformYoutubeCrumb },
+        { label: projectLabel, onClick: () => navigate('project-overview') },
+        { label: t.competitorsCrumb, onClick: () => navigate('project-competitors') },
+        { label: sampleVid?.channelTitle ?? chId ?? t.channelCrumb },
+      ];
+    }
+
+    if (sid === 'video-detail') {
+      const vid = currentEntry.params.videoId ? cachedVideosById[currentEntry.params.videoId] : undefined;
+      const fromChId = currentEntry.params.fromChannelId ?? vid?.channelId;
+      if (fromScreen && fromScreen.startsWith('global-')) {
+        return [
+          { label: t.platformYoutubeCrumb },
+          { label: t.overviewAreaCrumb, onClick: () => navigate('global-overview') },
+          { label: t.screenTitles[fromScreen], onClick: () => navigate(fromScreen) },
+          { label: vid?.title || t.videoCrumb },
+        ];
+      }
+      if (fromScreen === 'project-breakout' || fromScreen === 'project-keywords') {
+        return [
+          { label: t.platformYoutubeCrumb },
+          { label: projectLabel, onClick: () => navigate('project-overview') },
+          { label: t.screenTitles[fromScreen], onClick: () => navigate(fromScreen) },
+          { label: vid?.title || t.videoCrumb },
+        ];
+      }
+      const crumbs: Array<{ label: string; onClick?: () => void }> = [
+        { label: t.platformYoutubeCrumb },
+        { label: projectLabel, onClick: () => navigate('project-overview') },
+        { label: t.competitorsCrumb, onClick: () => navigate('project-competitors') },
+      ];
+      if (fromChId) {
+        crumbs.push({
+          label: vid?.channelTitle || t.channelCrumb,
+          onClick: () => navigate('channel-detail', { params: { channelId: fromChId } }),
+        });
+      }
+      crumbs.push({ label: vid?.title || t.videoCrumb });
+      return crumbs;
+    }
+
+    if (sid === 'article-detail') {
+      if (fromScreen && fromScreen.startsWith('project-')) {
+        return [
+          { label: t.platformYoutubeCrumb },
+          { label: projectLabel, onClick: () => navigate('project-overview') },
+          { label: t.screenTitles[fromScreen], onClick: () => navigate(fromScreen) },
+          { label: t.screenTitles[sid] },
+        ];
+      }
+      return [
+        { label: t.platformYoutubeCrumb },
+        { label: t.overviewAreaCrumb, onClick: () => navigate('global-overview') },
+        { label: t.rssCrumb, onClick: () => navigate('global-news') },
+        { label: t.screenTitles[sid] },
+      ];
+    }
+
+    if (sid === 'idea-detail') {
+      const idea = ideas.find((i) => i.id === currentEntry.params.ideaId);
+      if (fromScreen && fromScreen.startsWith('project-')) {
+        return [
+          { label: t.platformYoutubeCrumb },
+          { label: projectLabel, onClick: () => navigate('project-overview') },
+          { label: t.screenTitles['project-ideas'], onClick: () => navigate('project-ideas') },
+          { label: idea?.title ?? t.ideaCrumb },
+        ];
+      }
+      return [
+        { label: t.platformYoutubeCrumb },
+        { label: t.overviewAreaCrumb, onClick: () => navigate('global-overview') },
+        { label: t.ideasCrumb, onClick: () => navigate('global-ideas') },
+        { label: idea?.title ?? t.ideaCrumb },
+      ];
+    }
+
+    return [{ label: t.systemCrumb }, { label: t.screenTitles[sid] }];
+  };
+
+  const crumbs = buildCrumbs();
+
+  return (
+    <div className="rs-context-bar">
+      <div className="rs-context-bar-left">
+        <div className="rs-nav-btn-group">
+          <button
+            type="button"
+            className="rs-btn rs-btn-secondary rs-btn-icon rs-context-nav-btn"
+            disabled={!canGoBack}
+            onClick={goBack}
+            title={t.backTitle}
+            aria-label={t.backLabel}
+          >
+            <svg {...iconProps} width={14} height={14}>
+              <path d="M19 12H5" />
+              <path d="m12 19-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="rs-btn rs-btn-secondary rs-btn-icon rs-context-nav-btn"
+            disabled={!canGoForward}
+            onClick={goForward}
+            title={t.forwardTitle}
+            aria-label={t.forwardLabel}
+          >
+            <svg {...iconProps} width={14} height={14}>
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+
+        <span className="rs-context-divider" aria-hidden="true" />
+
+        <nav className="rs-breadcrumb" aria-label={t.breadcrumbAria}>
+          {crumbs.map((c, idx) => (
+            <React.Fragment key={`${c.label}-${idx}`}>
+              {idx > 0 && <span className="rs-crumb-sep" aria-hidden="true">/</span>}
+              {c.onClick ? (
+                <button type="button" className="rs-crumb-btn" onClick={c.onClick} title={c.label}>
+                  {c.label}
+                </button>
+              ) : (
+                <span
+                  className={idx === crumbs.length - 1 ? 'rs-crumb-current' : 'rs-crumb-static'}
+                  title={c.label}
+                >
+                  {c.label}
+                </span>
+              )}
+            </React.Fragment>
+          ))}
+        </nav>
+
+        {isPreview && (
+          <span className="rs-tag-stage2" title={t.stage2BadgeTitle}>
+            {t.stage2Badge}
+          </span>
+        )}
+      </div>
+    </div>
   );
 };

@@ -79,43 +79,32 @@
 
 ## 4. Kiến trúc Khung Ứng dụng (`App Shell`) & Điều hướng (`AppNavigationProvider`)
 
-### 4.1. Bố cục Khung Desktop-First (`100vh`)
-1. **Sidebar Bên Trái (`268px` mở rộng / `64px` thu gọn):**
-   - **Thương hiệu:** `Research Studio` + badge `LOCAL · DEMO`.
-   - **GLOBAL RESEARCH (`6` mục đúng thứ tự đã phê duyệt):**
-     1. `Tổng quan` (`G1`)
-     2. `Khám phá xu hướng` (`G2`)
-     3. `Nghiên cứu tự do` (`G3`)
-     4. `Video nổi bật` (`Giai đoạn 2`)
-     5. `Tin tức & thảo luận` (`G4`)
-     6. `Kho ý tưởng chung` (`G5`)
-   - **PROJECT RESEARCH:**
-     - **Một Dropdown duy nhất** chọn Project đang hoạt động + nút `+ Tạo Project`.
-     - **`10` mục dùng chung đúng thứ tự cho Project đang chọn:**
-       1. `Tổng quan dự án` (`P1`)
-       2. `Chủ đề nóng` (`Giai đoạn 2`)
-       3. `Nghiên cứu từ khóa` (`P4`)
-       4. `Video bứt phá` (`P3`)
-       5. `Theo dõi đối thủ` (`P2`)
-       6. `Chủ đề dài hạn` (`Giai đoạn 2`)
-       7. `Cơ hội nội dung` (`Giai đoạn 2`)
-       8. `Nghiên cứu AI` (`Giai đoạn 2`)
-       9. `Quản lý ý tưởng` (`P5`)
-       10. `Cài đặt dự án` (`P6`)
-   - **Chân Sidebar:** Nút truy cập `Cài đặt hệ thống & Pháp lý` và nút thu gọn/mở rộng Sidebar cho cửa sổ nhỏ (`1024px–1279px`).
-2. **Thanh Điều hướng Trên Cùng (Sticky TopBar `52px`):**
-   - Trái: Nút `← Quay lại (Back)`, `→ Tiến tới (Forward)` (kiểu nút keycap có trạng thái `disabled` rõ ràng), **Breadcrumb phân cấp** có thể bấm quay lại cấp trung gian, nhãn **`DEMO`**.
-   - Phải: Trạng thái kết nối/nguồn (`Online` / `Ngoại tuyến (Local)` / `Thiếu API Key`), đồng hồ **Quota 2 Bucket** (`Search: x/100 · API: y/10.000`), công cụ `Mô phỏng Trạng thái UI (DEMO)` phục vụ kiểm duyệt Prototype, nút chuyển `Light / Dark Mode` và nút mở `Cài đặt hệ thống`.
-3. **Vùng Nội dung Chính (`#rs-main-scroll`):**
-   - Tối đa chiều rộng thoáng (`max-width: 1480px`), thanh công cụ tìm kiếm/lọc gộp gọn phía trên bảng, hỗ trợ **Inspector Panel bên phải tùy chọn** (không ép mở sẵn làm hẹp bảng) khi xem nhanh video/bài báo ngay trong màn hình danh sách.
+### 4.1. Bố cục Khung Desktop-First theo chuẩn VOXLAB (`100vh`)
+1. **Thanh Tiêu đề & Tiện ích Toàn Chiều Rộng Trên Cùng (`TopBar` `46px`):**
+   - **Trái:** Biểu tượng + chữ `RESEARCH STUDIO` (`JetBrains Mono`, gradient hổ phách-cam đồng bộ Light/Dark Mode; bấm quay về `G1 — Tổng quan`).
+   - **Phải:** Cảnh báo khẩn (khi mất kết nối/API Key/Quota), nút viên con nhộng **`Hạn mức`** (mở popover chi tiết `Search Queries` + `General Data API` + trạng thái kết nối & Điều khoản YouTube), trình chọn ngôn ngữ satin (**`Tiếng Việt` / `English`**), và nút chuyển nhanh **Light / Dark Mode**.
+2. **Sidebar Bên Trái (`240px` mở rộng / `64px` thu gọn) theo Điều hướng 3 Cấp (`Nền tảng → Khu vực → Chức năng`):**
+   - **Cấp 1 — Dropdown Nền tảng:** Đặt ngay đầu Sidebar (`YouTube` đang hoạt động; `TikTok`, `Facebook`, `Instagram`, `X` ở trạng thái disabled với nhãn *Sắp ra mắt*). Ở `64px` hiển thị icon nền tảng đang chọn.
+   - **Cấp 2 — Bộ chuyển Khu vực (`Tổng quan` | `Dự án`):**
+     - Nhấn **`Tổng quan`** mở ngay màn hình `G1 — Tổng quan` (nút khu vực sáng viền nhấn + chấm hổ phách khi đang ở `G1`, không lặp lại mục con *Tổng quan*).
+     - Nhấn **`Dự án`** mở ngay màn hình `P1 — Tổng quan dự án` (nút khu vực sáng viền nhấn + chấm hổ phách khi đang ở `P1`, không lặp lại mục con *Tổng quan dự án*).
+   - **Cấp 3 — Danh sách Chức năng (chỉ hiển thị đúng khu vực đang chọn):**
+     - Khi ở **`Tổng quan`** (`5` mục con): `1. Khám phá xu hướng` (`G2`), `2. Nghiên cứu tự do` (`G3`), `3. Video nổi bật` (`GĐ 2`), `4. Tin tức & thảo luận` (`G4`), `5. Kho ý tưởng chung` (`G5`).
+     - Khi ở **`Dự án`**: **Một Dropdown duy nhất** chọn Project đang hoạt động + nút `+` tạo Project, bên dưới là `9` mục con: `1. Chủ đề nóng` (`GĐ 2`), `2. Nghiên cứu từ khóa` (`P4`), `3. Video bứt phá` (`P3`), `4. Theo dõi đối thủ` (`P2`), `5. Chủ đề dài hạn` (`GĐ 2`), `6. Cơ hội nội dung` (`GĐ 2`), `7. Nghiên cứu AI` (`GĐ 2`), `8. Quản lý ý tưởng` (`P5`), `9. Cài đặt dự án` (`P6`).
+   - **Kiểu mục chọn & Tiện ích:** Mỗi mục dùng khung icon `28×28px` (chuyển nền gradient hổ phách 3D + icon trắng và thanh dọc glowing bên trái khi đang active theo chuẩn VOXLAB). Bên dưới đường phân cách là mục **`Cài đặt`** và nút **`<` / `>`** thu gọn/mở rộng ở đáy Sidebar.
+3. **Khung Làm Việc Bo Góc Nổi Trên Nền Chassis (`.rs-workspace-chassis` → `.rs-workspace-frame`):**
+   - Nền chassis đá ấm `--rs-bg-app` (`#EFE9DF` / `#0C0A08`) bao quanh khung làm việc bo góc `12px` nền `--rs-bg-panel` có viền & bóng đổ nổi VOXLAB.
+   - **Đầu Khung (`WorkspaceContextBar`):** Nút `← Quay lại (Back)`, `→ Tiến tới (Forward)` và **Breadcrumb phân cấp 3 cấp** (`YouTube / Khu vực / Chức năng / Chi tiết`) có thể bấm quay lại cấp trung gian.
+   - **Vùng Nội dung Chính (`#rs-main-scroll`):** Tối đa chiều rộng thoáng (`max-width: 1460px`), hỗ trợ **Inspector Panel bên phải tùy chọn** bên trong khung làm việc nổi.
 
 ### 4.2. Hợp đồng `AppNavigationProvider` (`ARCH-05`)
-- **Trạng thái nguyên tử (`useSyncExternalStore`):** Hợp nhất `(entryId, screenId, scope, projectId, params, viewState)` vào 1 store đồng bộ cùng lúc để không có 1 khung hình nào bị trộn dữ liệu Project cũ sang Project mới.
+- **Trạng thái nguyên tử (`useSyncExternalStore`):** Hợp nhất `(entryId, screenId, projectId, params, viewState)` kèm `activeArea` suy diễn từ `resolveActiveNavArea(entries, index)` vào 1 store đồng bộ cùng lúc để không có 1 khung hình nào bị trộn dữ liệu Project cũ sang Project mới.
+- **Bảo toàn Project & Khu vực khi chuyển trang:** Chuyển đổi qua lại `Tổng quan ↔ Dự án` luôn giữ nguyên `projectId` đang chọn (`sessionStorage` + `localStorage rs_last_project_id`). Khi mở trang `Chi tiết` (`Kênh`, `Video`, `Bài viết`, `Ý tưởng`) hoặc `Cài đặt`, store lưu `params.fromScreen` (và dò lịch sử liền trước) giúp Sidebar giữ đúng khu vực đang làm việc thay vì nhảy khu vực ngoài ý muốn.
 - **Bền vững qua `F5`, `Back`, `Forward`:**
   - `window.history.scrollRestoration = "manual"`.
-  - Đồng bộ route lên URL hash (`#/global/...`, `#/projects/{projectId}/...`) và lưu lịch sử stack metadata nhẹ (`filters`, `sort`, `tab`, `page`, `scrollTop` — tuyệt đối không lưu mảng API data) vào `sessionStorage`.
+  - Đồng bộ route lên URL hash (`#/global/...`, `#/project/...?pid=...`, `#/detail/...?from=...`) và lưu lịch sử stack metadata nhẹ (`filters`, `sort`, `tab`, `page`, `scrollTop` — tuyệt đối không lưu mảng API data) vào `sessionStorage`.
   - Hỗ trợ luồng 4 cấp: **`Theo dõi đối thủ → Chi tiết Kênh → Danh sách video của kênh → Chi tiết Video`**.
-  - Khi đổi filter/sort/page hoặc cuộn vùng `#rs-main-scroll`, cập nhật entry hiện tại qua `history.replaceState` + `sessionStorage`. Khi quay lại (`Back`) hoặc `Forward`, khôi phục filter/sort/page trước rồi đặt `el.scrollTop` trong `requestAnimationFrame`.
+  - Khi đổi filter/sort/page hoặc cuộn vùng `#rs-main-scroll`, cập nhật entry hiện tại qua `sessionStorage` + `history`. Khi quay lại (`Back`) hoặc `Forward`, khôi phục filter/sort/page trước rồi đặt `el.scrollTop` trong `requestAnimationFrame`.
   - Nếu một Project đã bị xóa khi người dùng bấm `Back` vào lịch sử cũ, điều hướng tự fallback an toàn sang Project khả dụng hoặc `Tổng quan` kèm thông báo nhẹ.
 
 ---

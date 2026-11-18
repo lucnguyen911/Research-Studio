@@ -61,6 +61,20 @@ export interface TranslationDict {
   };
   sidebar: {
     mainNavAria: string;
+    selectPlatformAria: string;
+    platformTooltip: (name: string) => string;
+    platforms: {
+      youtube: string;
+      tiktokSoon: string;
+      facebookSoon: string;
+      instagramSoon: string;
+      xSoon: string;
+    };
+    areaAria: string;
+    overviewArea: string;
+    overviewAreaTitle: string;
+    projectArea: string;
+    projectAreaTitle: string;
     globalSection: string;
     projectSection: string;
     selectProjectAria: string;
@@ -76,6 +90,10 @@ export interface TranslationDict {
     projectMenu: Record<ProjectScreenId, string>;
   };
   topbar: {
+    brandHomeTitle: string;
+    platformYoutubeCrumb: string;
+    overviewAreaCrumb: string;
+    projectAreaCrumb: string;
     backLabel: string;
     backTitle: string;
     forwardLabel: string;
@@ -520,6 +538,20 @@ const VI: TranslationDict = {
   },
   sidebar: {
     mainNavAria: 'Điều hướng chính',
+    selectPlatformAria: 'Chọn nền tảng mạng xã hội',
+    platformTooltip: (name) => `Nền tảng: ${name}`,
+    platforms: {
+      youtube: 'YouTube',
+      tiktokSoon: 'TikTok — Sắp ra mắt',
+      facebookSoon: 'Facebook — Sắp ra mắt',
+      instagramSoon: 'Instagram — Sắp ra mắt',
+      xSoon: 'X — Sắp ra mắt',
+    },
+    areaAria: 'Chọn khu vực điều hướng',
+    overviewArea: 'Tổng quan',
+    overviewAreaTitle: 'Mở trang Tổng quan chung',
+    projectArea: 'Dự án',
+    projectAreaTitle: 'Mở trang Tổng quan dự án',
     globalSection: 'Nghiên cứu chung',
     projectSection: 'Nghiên cứu dự án',
     selectProjectAria: 'Chọn dự án đang hoạt động',
@@ -553,6 +585,10 @@ const VI: TranslationDict = {
     },
   },
   topbar: {
+    brandHomeTitle: 'Về trang Tổng quan',
+    platformYoutubeCrumb: 'YouTube',
+    overviewAreaCrumb: 'Tổng quan',
+    projectAreaCrumb: 'Dự án',
     backLabel: 'Quay lại',
     backTitle: 'Quay lại trang trước',
     forwardLabel: 'Tiến tới',
@@ -1076,6 +1112,20 @@ const EN: TranslationDict = {
   },
   sidebar: {
     mainNavAria: 'Main navigation',
+    selectPlatformAria: 'Select social platform',
+    platformTooltip: (name) => `Platform: ${name}`,
+    platforms: {
+      youtube: 'YouTube',
+      tiktokSoon: 'TikTok — Coming soon',
+      facebookSoon: 'Facebook — Coming soon',
+      instagramSoon: 'Instagram — Coming soon',
+      xSoon: 'X — Coming soon',
+    },
+    areaAria: 'Select navigation area',
+    overviewArea: 'Overview',
+    overviewAreaTitle: 'Open Global Overview',
+    projectArea: 'Projects',
+    projectAreaTitle: 'Open Project Overview',
     globalSection: 'Global Research',
     projectSection: 'Project Research',
     selectProjectAria: 'Select active project',
@@ -1109,6 +1159,10 @@ const EN: TranslationDict = {
     },
   },
   topbar: {
+    brandHomeTitle: 'Go to Overview',
+    platformYoutubeCrumb: 'YouTube',
+    overviewAreaCrumb: 'Overview',
+    projectAreaCrumb: 'Projects',
     backLabel: 'Back',
     backTitle: 'Go back',
     forwardLabel: 'Forward',

@@ -32,23 +32,23 @@
 ## 1. Mục tiêu sản phẩm và phạm vi MVP
 
 ### 1.1. Mục tiêu cốt lõi & Người dùng mục tiêu
-- **True Goal:** Giúp người sáng tạo nội dung YouTube cá nhân quản lý đồng thời nhiều kênh/chủ đề (Project) chuẩn hóa quy trình **Khám phá tín hiệu thực tế (YouTube + RSS) → Theo dõi kênh đối thủ & từ khóa → Đánh giá, lưu và theo dõi tiến độ sản xuất Ý tưởng theo từng kênh** ngay trên máy Windows 11 cá nhân, chi phí API mặc định `0 USD` và tuân thủ đầy đủ chính sách của YouTube.
+- **True Goal:** Giúp người sáng tạo nội dung YouTube cá nhân (với cấu trúc điều hướng 3 cấp sẵn sàng mở rộng đa nền tảng trong tương lai) quản lý đồng thời nhiều kênh/chủ đề (Project) theo quy trình **Khám phá tín hiệu thực tế (YouTube + RSS) → Theo dõi kênh đối thủ & từ khóa → Đánh giá, lưu và theo dõi tiến độ sản xuất Ý tưởng theo từng kênh** ngay trên máy Windows 11 cá nhân, chi phí API mặc định `0 USD` và tuân thủ đầy đủ chính sách của YouTube.
 - **Target User:** Nhà sáng tạo nội dung YouTube cá nhân vận hành 1 hoặc nhiều kênh có thị trường (`regionCode`), ngôn ngữ (`relevanceLanguage`) và nhóm đối thủ khác nhau.
 
 ### 1.2. Trong phạm vi MVP V1 (`In Scope` — Standard Mode)
 - **11/16 màn hình hoạt động thật bằng dữ liệu thực:**
-  - **Global Research (5 màn hình):** `G1. Tổng quan`, `G2. Khám phá xu hướng`, `G3. Nghiên cứu tự do`, `G4. Tin tức & thảo luận`, `G5. Kho ý tưởng chung`.
-  - **Project Research (6 màn hình):** `P1. Tổng quan dự án`, `P2. Theo dõi đối thủ`, `P3. Video bứt phá` (**Standard Mode**), `P4. Nghiên cứu từ khóa` (**Standard Mode**), `P5. Quản lý ý tưởng`, `P6. Cài đặt dự án`.
+  - **Tổng quan / Global Research (5 màn hình):** `G1. Tổng quan`, `G2. Khám phá xu hướng`, `G3. Nghiên cứu tự do`, `G4. Tin tức & thảo luận`, `G5. Kho ý tưởng chung`.
+  - **Dự án / Project Research (6 màn hình):** `P1. Tổng quan dự án`, `P2. Theo dõi đối thủ`, `P3. Video bứt phá` (**Standard Mode**), `P4. Nghiên cứu từ khóa` (**Standard Mode**), `P5. Quản lý ý tưởng`, `P6. Cài đặt dự án`.
 - **Khung hệ thống bắt buộc đi kèm:**
-  - *Cài đặt hệ thống chung & Pháp lý* (API Key DPAPI, cảnh báo quota 2 bucket, tùy chọn làm mới tự động, giao diện Light/Dark, quản lý xóa cache `API Data`, Điều khoản sử dụng & Chính sách Quyền riêng tư).
+  - *Cài đặt hệ thống chung & Pháp lý* (API Key DPAPI, cảnh báo quota 2 bucket, tùy chọn làm mới tự động, giao diện Light/Dark, chọn ngôn ngữ `Tiếng Việt`/`English`, quản lý xóa cache `API Data`, Điều khoản sử dụng & Chính sách Quyền riêng tư).
   - *Màn hình Chi tiết nhiều cấp* (*Chi tiết Video*, *Chi tiết Kênh*, *Chi tiết Bài báo RSS*, *Chi tiết Ý tưởng*) hỗ trợ điều hướng Back/Forward kiểu trình duyệt.
 - **Chế độ dữ liệu & xử lý:** `100%` thuật toán Python tất định (không AI), nguồn dữ liệu hợp lệ gồm **YouTube Data API v3 (Standard Mode — API Key người dùng)** và **RSS/Atom công khai hợp lệ**.
 
 ### 1.3. Ngoài phạm vi MVP V1 (`Out of Scope`)
-- **5 màn hình Giai đoạn 2:** *Video nổi bật* (Global), *Chủ đề nóng*, *Chủ đề dài hạn*, *Cơ hội nội dung*, *Nghiên cứu AI* (vẫn xuất hiện trên Sidebar với nhãn `Giai đoạn 2` và màn hình placeholder trung thực, không chức năng giả).
+- **5 màn hình Giai đoạn 2:** *Video nổi bật* (`Tổng quan`), *Chủ đề nóng*, *Chủ đề dài hạn*, *Cơ hội nội dung*, *Nghiên cứu AI* (`Dự án`) — hiển thị trong danh sách chức năng của khu vực tương ứng kèm nhãn `Giai đoạn 2` (`GĐ 2`) và màn hình giới thiệu trung thực, không chức năng giả.
 - **Chỉ số dẫn xuất từ `YouTube API Data` & lưu dài hạn `> 30 ngày`:** Không tính và không hiển thị `Outlier Multiplier`, `Views/ngày`, `Engagement Rate`, `Channel Median`, điểm cơ hội tổng hợp từ `API Data`, không tổng hợp thống kê `API Data` chéo nhiều kênh độc lập, và không lưu snapshot thống kê quá `30 ngày lịch`. **Không xây trước module ẩn hay công tắc mở khóa nâng cao trong MVP V1.**
 - **AI Local / Cloud:** Không kết nối LM Studio, Ollama hay Cloud AI trong MVP V1.
-- **Nền tảng khác & Tính năng hệ thống ngoài phạm vi:** Không làm Facebook, TikTok, X (và không xây plugin engine đa nền tảng sớm); không scraping; không giả lập YouTube Search Volume hoặc doanh thu; chưa đóng gói Tauri ở giai đoạn này; không tài khoản cloud, Windows Service hay telemetry.
+- **Nền tảng mạng xã hội khác (V1):** Trên dropdown chọn nền tảng ở đầu Sidebar, chỉ **`YouTube`** hoạt động thực tế trong MVP V1; **`TikTok`, `Facebook`, `Instagram`, `X`** hiển thị ở trạng thái vô hiệu hóa (`Sắp ra mắt`). Không tạo dữ liệu giả, chức năng giả, API adapter hay hệ thống plugin đa nền tảng sớm; không scraping; không giả lập Search Volume hoặc doanh thu; chưa đóng gói Tauri; không tài khoản cloud hay telemetry.
 
 ---
 
@@ -204,7 +204,7 @@ Năm màn hình thuộc Giai đoạn 2 gồm:
 - **Project Research:** `Chủ đề nóng`, `Chủ đề dài hạn`, `Cơ hội nội dung`, `Nghiên cứu AI`.
 
 **Quy tắc hành vi bắt buộc trong MVP V1:**
-1. **Hiển thị đúng cấu trúc Sidebar:** Cả 5 mục vẫn hiển thị đúng thứ tự trong nhóm *Global Research* và *Project Research* để bảo toàn khung thông tin sản phẩm, kèm huy hiệu **`Giai đoạn 2`** rõ ràng bên cạnh tên mục.
+1. **Hiển thị đúng cấu trúc Sidebar 3 cấp:** Các mục Giai đoạn 2 hiển thị trong danh sách chức năng của khu vực đang chọn (`Tổng quan`: 1 mục *Video nổi bật*; `Dự án`: 4 mục *Chủ đề nóng*, *Chủ đề dài hạn*, *Cơ hội nội dung*, *Nghiên cứu AI*), kèm huy hiệu **`GĐ 2` / `Giai đoạn 2`** rõ ràng bên cạnh tên mục.
 2. **Trang giới thiệu trung thực khi bấm vào:** Hiển thị rõ 4 thông tin:
    - Tên tính năng và mục tiêu dự kiến ở Giai đoạn 2.
    - Lý do chưa kích hoạt trong MVP V1 (ví dụ: *Nghiên cứu AI* chờ giai đoạn tích hợp LM Studio/Ollama; *Cơ hội nội dung / Chủ đề nóng / Chủ đề dài hạn / Video nổi bật* cần chuỗi phân tích nâng cao/Derived Metrics và điều kiện phê duyệt chính sách API hoặc hạ tầng phân tích ở Giai đoạn 2).
@@ -241,7 +241,10 @@ Năm màn hình thuộc Giai đoạn 2 gồm:
 
 ## 5. Quản lý Project và dữ liệu dùng chung
 
-- **Một Dropdown Project duy nhất:** Hiển thị cố định ở Sidebar (hoặc đỉnh Sidebar), cho phép chọn Project đang hoạt động hoặc mở form tạo Project mới.
+- **Định hướng mở rộng đa nền tảng:**
+  - **Project không bị gắn cứng với một nền tảng duy nhất:** Schema bảng `projects` độc lập với nền tảng; khi các phiên bản sau tích hợp thêm nền tảng, một Project có thể liên kết nội dung nghiên cứu từ nhiều nền tảng khác nhau.
+  - **Tách biệt nguồn dữ liệu & dữ liệu người dùng:** Dữ liệu thu thập từ mỗi nền tảng (như `youtube_channels`, `youtube_videos`) và nguồn ngoài (`rss_articles`) phải phân biệt nguồn rõ ràng; còn Ý tưởng và ghi chú do người dùng tạo (`ideas`, `project_ideas`) luôn dùng chung được giữa các Project.
+- **Một Dropdown Project duy nhất:** Hiển thị trong khu vực **`Dự án`** ở Sidebar (ngay phía trên 9 chức năng con của dự án), cho phép chọn Project đang hoạt động hoặc bấm `+` tạo Project mới; chuyển đổi qua lại giữa khu vực `Tổng quan` và `Dự án` vẫn bảo toàn Project đang chọn (`rs_last_project_id`).
 - **Tách biệt rành mạch 3 tầng dữ liệu trong cùng 1 file SQLite `research_studio.db`:**
 
 | Nhóm dữ liệu | Thực thể / Bảng khái niệm | Quy tắc `project_id` | Chu kỳ giữ dữ liệu |
@@ -439,10 +442,13 @@ Mỗi video trong cơ sở dữ liệu và trên UI phải tách biệt rõ 3 l�
 > Mô tả khung hành vi và định hướng giao diện đủ rõ cho bước thiết kế chi tiết tại **Phase 6 (`GATE D`)** mà không viết trước CSS/mã giao diện trong SPEC.
 
 - **Tham chiếu thiết kế:** Dựa theo phong cách trực quan của repo [VOXLAB](https://github.com/lucnguyen911/VOXLAB.git) (chỉ làm tham chiếu; tuyệt đối không chỉnh sửa repo VOXLAB).
-- **Bố cục tổng thể Desktop-First:**
-  - **Sidebar bên trái:** Trên cùng là tên ứng dụng Research Studio; **1 dropdown duy nhất** để chọn Project đang làm việc hoặc bấm tạo Project mới; bên dưới chia rõ 2 phân khu **GLOBAL RESEARCH** (6 mục, 1 mục gắn nhãn `Giai đoạn 2`) và **PROJECT RESEARCH** (10 mục, 4 mục gắn nhãn `Giai đoạn 2`); cuối Sidebar có nút truy cập **Cài đặt hệ thống & Pháp lý**.
-  - **Header gọn bên trên vùng nội dung:** Nút `Back` / `Forward`, tên màn hình hiện tại & breadcrumb (khi ở trang Chi tiết), huy hiệu tóm tắt Quota 2 bucket (`Search` & `API`), trạng thái Online/Offline & Tự động làm mới, nút chuyển nhanh `Light / Dark Mode`.
-  - **Vùng nội dung chính bên phải:** Mật độ thông tin tối ưu cho màn hình desktop Windows 11, chữ `Inter`, bảng dữ liệu và thẻ thông tin thống nhất hành vi, rõ ràng giữa **Dữ liệu YouTube API**, **Dữ liệu RSS ngoài YouTube**, và **Dữ liệu / Nhãn thủ công của người dùng**.
+- **Bố cục tổng thể Desktop-First (chuẩn VOXLAB):**
+  - **Thanh tiêu đề trên cùng (`TopBar` toàn chiều rộng, `46px`):** Góc trái là biểu tượng + chữ `RESEARCH STUDIO` (bấm về trang Tổng quan); góc phải là viên trạng thái Hạn mức/Kết nối, nút chọn ngôn ngữ (`Tiếng Việt` / `English`), và nút chuyển nhanh `Light / Dark Mode`.
+  - **Sidebar bên trái (`240px` mở rộng / `64px` thu gọn) theo 3 cấp (`Nền tảng → Khu vực → Chức năng`):**
+    1. **Dropdown Nền tảng:** `YouTube` (mặc định · hoạt động); `TikTok`, `Facebook`, `Instagram`, `X` ở trạng thái vô hiệu hóa (`Sắp ra mắt`).
+    2. **Thanh chuyển Khu vực (`Tổng quan` | `Dự án`):** Nhấn `Tổng quan` mở thẳng `G1. Tổng quan`; nhấn `Dự án` mở thẳng `P1. Tổng quan dự án` — chỉ hiển thị danh sách chức năng của khu vực đang chọn (không lặp lại mục con Tổng quan / Tổng quan dự án). Khi chọn `Tổng quan`: hiển thị `5` chức năng con (`Khám phá xu hướng`, `Nghiên cứu tự do`, `Video nổi bật [GĐ 2]`, `Tin tức & thảo luận`, `Kho ý tưởng chung`). Khi chọn `Dự án`: hiển thị **1 dropdown chọn/tạo Project duy nhất** và `9` chức năng con (`Chủ đề nóng [GĐ 2]`, `Nghiên cứu từ khóa`, `Video bứt phá`, `Theo dõi đối thủ`, `Chủ đề dài hạn [GĐ 2]`, `Cơ hội nội dung [GĐ 2]`, `Nghiên cứu AI [GĐ 2]`, `Quản lý ý tưởng`, `Cài đặt dự án`).
+    3. **Khu vực tiện ích & thu gọn:** Nút truy cập **`Cài đặt`** bên dưới đường phân cách và nút thu gọn/mở rộng Sidebar ở đáy cột.
+  - **Khung làm việc bo góc nổi trên nền chassis (`Workspace Frame`):** Phần đầu khung có thanh ngữ cảnh gọn gồm nút `Back` / `Forward` và **Breadcrumb 3 cấp**; bên dưới là vùng nội dung chính với chữ `Inter`, bảng dữ liệu và thẻ thông tin thống nhất hành vi, rõ ràng giữa **Dữ liệu YouTube API**, **Dữ liệu RSS ngoài YouTube**, và **Dữ liệu / Nhãn thủ công của người dùng**.
 - **Chủ đề & Tương phản bắt buộc:**
   - **Light Mode:** Tông Kem (Cream), Nâu cát (Sand Brown) và Vàng hổ phách (Amber Gold).
   - **Dark Mode:** Tông Đen Obsidian, Nâu tối và Vàng kim (Metallic Gold).
@@ -482,7 +488,7 @@ Theo tài liệu chính thức [YouTube API Services Developer Policies (III.A.1
 
 | Mã AC | Chức năng / Yêu cầu | Điều kiện nghiệm thu kiểm chứng được (Pass Condition) |
 |---|---|---|
-| **AC-01** | **Khung app & Điều hướng 11/16 màn hình** | Sidebar hiển thị đủ 6 mục Global + 10 mục Project; 11 màn hình MVP hoạt động với dữ liệu thật từ Backend/SQLite; 5 màn hình Giai đoạn 2 có nhãn `Giai đoạn 2`, mở ra hiển thị trang giải thích trung thực, không có số liệu giả và trả `0` console error/warning qua Chrome DevTools. |
+| **AC-01** | **Khung app VOXLAB & Điều hướng 3 cấp (11/16 màn hình)** | Thanh `TopBar` toàn chiều rộng trên cùng; Sidebar 3 cấp (`Nền tảng` với `YouTube` hoạt động + 4 nền tảng `Sắp ra mắt` disabled → Khu vực `Tổng quan` / `Dự án` mở thẳng `G1` / `P1` → `5` mục con Tổng quan hoặc dropdown Project duy nhất + `9` mục con Dự án, kèm `Cài đặt` & nút thu gọn); khung làm việc nổi bo góc có `Back/Forward + Breadcrumb`; 11 màn hình MVP hoạt động dữ liệu thật và 5 màn hình `Giai đoạn 2` trung thực, `0` console error/warning qua Chrome DevTools. |
 | **AC-02** | **Hoạt động Global khi chưa có Project** | Khi bảng `projects` có `0` bản ghi, cả 5 màn hình Global (`G1–G5`) vẫn mở, đọc RSS, lưu Ý tưởng vào Kho chung và tìm YouTube bình thường; các màn hình Project (`P1–P6`) hiển thị Empty State hướng dẫn tạo Project đầu tiên. |
 | **AC-03** | **Tách thực thể gốc dùng chung & Cô lập `project_id`** | Thêm cùng 1 kênh (`UC...`), 1 video và 1 ý tưởng vào cả Project A và Project B: bảng gốc chỉ chứa **1** bản ghi duy nhất cho kênh/video/ý tưởng đó; cập nhật góc khai thác/trạng thái/từ khóa ở Project A không làm thay đổi Project B (kiểm chứng bằng integration test SQLite & API). |
 | **AC-04** | **Dropdown Project duy nhất & AbortController** | Chuyển nhanh từ Project A sang Project B khi request Project A đang chờ: request cũ bị hủy (`AbortError`) hoặc bị bỏ qua, dữ liệu hiển thị trên màn hình khớp 100% `project_id = B`. |

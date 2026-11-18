@@ -6,6 +6,7 @@ import {
   goForward,
   navigateTo,
   reconcileValidProjects,
+  resolveActiveNavArea,
   subscribeNav,
   switchActiveProjectAtomic,
   updateCurrentViewState,
@@ -18,6 +19,7 @@ export const AppNavigationProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const value: AppNavigationContextValue = {
     currentEntry,
+    activeArea: resolveActiveNavArea(state.entries, state.index),
     canGoBack: state.index > 0,
     canGoForward: state.index < state.entries.length - 1,
     historyPosition: `${state.index + 1}/${state.entries.length}`,
