@@ -45,41 +45,6 @@ const overviewIconProps = {
   'aria-hidden': true,
 };
 
-const OverviewShortcutIcon: React.FC<{ kind: 'trends' | 'search' | 'news' | 'ideas' }> = ({ kind }) => {
-  switch (kind) {
-    case 'trends':
-      return (
-        <svg {...overviewIconProps}>
-          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-          <polyline points="16 7 22 7 22 13" />
-        </svg>
-      );
-    case 'search':
-      return (
-        <svg {...overviewIconProps}>
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-3.5-3.5" />
-        </svg>
-      );
-    case 'news':
-      return (
-        <svg {...overviewIconProps}>
-          <path d="M4 11a9 9 0 0 1 9 9" />
-          <path d="M4 4a16 16 0 0 1 16 16" />
-          <circle cx="5" cy="19" r="1.5" fill="currentColor" stroke="none" />
-        </svg>
-      );
-    case 'ideas':
-      return (
-        <svg {...overviewIconProps}>
-          <path d="M9 18h6" />
-          <path d="M10 22h4" />
-          <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
-        </svg>
-      );
-  }
-};
-
 export const GlobalOverviewScreen: React.FC = () => {
   const { currentEntry, navigate } = useAppNavigation();
   const {
@@ -180,38 +145,6 @@ export const GlobalOverviewScreen: React.FC = () => {
                 onAction: () => navigate('system-settings'),
               }
             : null;
-
-  const shortcuts: Array<{
-    id: 'global-trends' | 'global-search' | 'global-news' | 'global-ideas';
-    icon: 'trends' | 'search' | 'news' | 'ideas';
-    title: string;
-    desc: string;
-  }> = [
-    {
-      id: 'global-trends',
-      icon: 'trends',
-      title: t.shortcuts.trends.title,
-      desc: t.shortcuts.trends.desc,
-    },
-    {
-      id: 'global-search',
-      icon: 'search',
-      title: t.shortcuts.search.title,
-      desc: t.shortcuts.search.desc,
-    },
-    {
-      id: 'global-news',
-      icon: 'news',
-      title: t.shortcuts.news.title,
-      desc: t.shortcuts.news.desc,
-    },
-    {
-      id: 'global-ideas',
-      icon: 'ideas',
-      title: t.shortcuts.ideas.title,
-      desc: t.shortcuts.ideas.desc,
-    },
-  ];
 
   return (
     <div className="rs-container">
@@ -417,26 +350,6 @@ export const GlobalOverviewScreen: React.FC = () => {
                 </div>
               )}
             </section>
-          </div>
-
-          <div className="rs-shortcut-section-label">{t.shortcutsTitle}</div>
-          <div className="rs-grid-4">
-            {shortcuts.map((sc) => (
-              <button
-                key={sc.id}
-                type="button"
-                className="rs-shortcut-tile"
-                onClick={() => navigate(sc.id)}
-              >
-                <span className="rs-shortcut-icon">
-                  <OverviewShortcutIcon kind={sc.icon} />
-                </span>
-                <div>
-                  <div className="rs-shortcut-title">{sc.title}</div>
-                  <div className="rs-shortcut-desc">{sc.desc}</div>
-                </div>
-              </button>
-            ))}
           </div>
         </>
       )}

@@ -1,17 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import {
   ApiClientError,
+  createStorageBackupApi,
   fetchChannelDetailApi,
   fetchRssArticleDetailApi,
+  fetchStorageStatusApi,
   fetchVideoDetailApi,
   isAbortError,
+  migrateDataDirApi,
+  openStorageFolderApi,
+  pickStorageBackupFileApi,
+  pickStorageFolderApi,
+  restoreStorageBackupApi,
   updateRssArticleApi,
+  updateStorageBackupConfigApi,
 } from '../api/client';
 import { formatDateTimeVi, mapYoutubeVideoDtoToItem } from '../api/mappers';
-import { getTranslations } from '../i18n/translations';
+import { getActiveLocale, getTranslations } from '../i18n/translations';
 import type {
   ChannelDetailResponseDto,
   RssArticleDto,
+  StorageStatusDto,
   VideoDetailResponseDto,
 } from '../api/types';
 import { IDEA_STATUS_LABELS, formatInt, formatSnapshotDeltaLabel } from '../prototype/demoData';
@@ -1046,6 +1055,575 @@ const ProjectLinkEditorCard: React.FC<{
   );
 };
 
+function formatStorageBytes(bytes: number, locale: string): string {
+  if (bytes < 1024) {
+    return `${bytes.toLocaleString(locale)} B`;
+  }
+  const kb = bytes / 1024;
+  if (kb < 1024) {
+    return `${kb.toLocaleString(locale, { maximumFractionDigits: 1 })} KB`;
+  }
+  const mb = kb / 1024;
+  return `${mb.toLocaleString(locale, { maximumFractionDigits: 2 })} MB`;
+}
+
+function formatStorageTimestamp(iso: string | null | undefined, locale: string): string {
+  if (!iso) return '—';
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return parsed.toLocaleString(locale);
+}
+
+function extractStorageErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiClientError && err.message) return err.message;
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}
+
+function basenameFromPath(filePath: string): string {
+  const parts = filePath.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? filePath;
+}
+
+const StorageAndBackupSection: React.FC = () => {
+  const { uiLanguage, pushToast, resetVolatileCachesAndSync } = usePrototypeWorkspace();
+  const tr = getTranslations(uiLanguage);
+  const st = tr.settings.storage;
+  const toastT = tr.toasts;
+  const locale = getActiveLocale(uiLanguage);
+
+  const [status, setStatus] = useState<StorageStatusDto | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  const [dataDirDraft, setDataDirDraft] = useState('');
+  const [externalDirDraft, setExternalDirDraft] = useState('');
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+
+  const [conflictInfo, setConflictInfo] = useState<{
+    targetDir: string;
+    resetToDefault: boolean;
+    projectsCount: number;
+    ideasCount: number;
+  } | null>(null);
+
+  const [pendingRestore, setPendingRestore] = useState<{
+    fullPath: string;
+    filename: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchStorageStatusApi(controller.signal)
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        setStatus(res);
+        setExternalDirDraft(res.externalBackupDir ?? '');
+        setLoadFailed(false);
+        setLoadingStatus(false);
+      })
+      .catch((err) => {
+        if (isAbortError(err) || controller.signal.aborted) return;
+        setLoadFailed(true);
+        setLoadingStatus(false);
+      });
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
+  const handleToggleAutoBackup = async (checked: boolean) => {
+    setBusyAction('config');
+    try {
+      const updated = await updateStorageBackupConfigApi({ autoBackupEnabled: checked });
+      setStatus(updated);
+      pushToast('success', toastT.storageConfigSaved);
+    } catch (err) {
+      if (!isAbortError(err)) {
+        pushToast('error', extractStorageErrorMessage(err, toastT.storageConfigError));
+      }
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleSaveExternalDir = async (dirValue: string | null) => {
+    setBusyAction('config');
+    try {
+      const updated = await updateStorageBackupConfigApi({ externalBackupDir: dirValue ?? '' });
+      setStatus(updated);
+      setExternalDirDraft(updated.externalBackupDir ?? '');
+      pushToast('success', toastT.storageConfigSaved);
+    } catch (err) {
+      if (!isAbortError(err)) {
+        pushToast('error', extractStorageErrorMessage(err, toastT.storageConfigError));
+      }
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleCreateBackupNow = async () => {
+    setBusyAction('backup');
+    try {
+      const res = await createStorageBackupApi();
+      setStatus(res.status);
+      if (res.externalWarning) {
+        pushToast('error', res.externalWarning);
+      } else {
+        pushToast('success', toastT.storageBackupCreated(res.backupFilename));
+      }
+    } catch (err) {
+      if (!isAbortError(err)) {
+        pushToast('error', extractStorageErrorMessage(err, toastT.storageBackupError));
+      }
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleMigrateDataDir = async (options: {
+    targetDir?: string;
+    resetToDefault?: boolean;
+    ifExists?: 'error' | 'use_existing' | 'copy_overwrite';
+  }) => {
+    setBusyAction('migrate');
+    try {
+      const res = await migrateDataDirApi({
+        targetDir: options.targetDir,
+        resetToDefault: Boolean(options.resetToDefault),
+        ifExists: options.ifExists ?? 'error',
+      });
+      setStatus(res.status);
+      setDataDirDraft('');
+      setConflictInfo(null);
+      await resetVolatileCachesAndSync();
+      pushToast('success', toastT.storageMigrated(res.activeDataDir));
+    } catch (err) {
+      if (isAbortError(err)) return;
+      if (err instanceof ApiClientError && err.code === 'TARGET_DB_ALREADY_EXISTS') {
+        const details = err.details ?? {};
+        setConflictInfo({
+          targetDir: String(details.targetDir ?? options.targetDir ?? ''),
+          resetToDefault: Boolean(options.resetToDefault),
+          projectsCount: Number(details.projectsCount ?? 0),
+          ideasCount: Number(details.ideasCount ?? 0),
+        });
+        return;
+      }
+      pushToast('error', extractStorageErrorMessage(err, toastT.storageMigrateError));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!pendingRestore) return;
+    setBusyAction('restore');
+    try {
+      const res = await restoreStorageBackupApi(pendingRestore.fullPath);
+      setStatus(res.status);
+      setPendingRestore(null);
+      await resetVolatileCachesAndSync();
+      pushToast('success', toastT.storageRestored(res.restoredFrom));
+    } catch (err) {
+      if (!isAbortError(err)) {
+        pushToast('error', extractStorageErrorMessage(err, toastT.storageRestoreError));
+      }
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleOpenFolder = async (target: 'data_root' | 'user_backups' | 'external_backup') => {
+    try {
+      await openStorageFolderApi(target);
+    } catch (err) {
+      if (!isAbortError(err)) {
+        pushToast('error', extractStorageErrorMessage(err, toastT.storageOpenFolderError));
+      }
+    }
+  };
+
+  const handlePickFolder = async (onSelected: (selected: string) => void, initial?: string | null) => {
+    setBusyAction('pick');
+    try {
+      const res = await pickStorageFolderApi(initial);
+      if (res.selectedPath) {
+        onSelected(res.selectedPath);
+      }
+    } catch (err) {
+      if (!isAbortError(err)) {
+        pushToast('error', extractStorageErrorMessage(err, toastT.storagePickError));
+      }
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handlePickRestoreFile = async () => {
+    setBusyAction('pick');
+    try {
+      const res = await pickStorageBackupFileApi(status?.externalBackupDir || status?.userBackupsDir);
+      if (res.selectedPath) {
+        setPendingRestore({
+          fullPath: res.selectedPath,
+          filename: basenameFromPath(res.selectedPath),
+        });
+      }
+    } catch (err) {
+      if (!isAbortError(err)) {
+        pushToast('error', extractStorageErrorMessage(err, toastT.storagePickError));
+      }
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  return (
+    <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <h2 style={{ margin: 0, fontSize: '15.5px' }}>{st.sectionTitle}</h2>
+        {status && (
+          <span className={`rs-badge ${status.isDefaultDataDir ? '' : 'rs-badge-success'}`}>
+            {status.isDefaultDataDir ? st.defaultBadge : st.customBadge}
+          </span>
+        )}
+      </div>
+
+      {loadingStatus && (
+        <div style={{ fontSize: '13px', color: 'var(--rs-text-muted)' }}>{st.loadingStatus}</div>
+      )}
+
+      {!loadingStatus && (loadFailed || !status) && (
+        <div className="rs-card-subtle" style={{ fontSize: '13px', color: 'var(--rs-text-muted)' }}>
+          {st.loadFailed}
+        </div>
+      )}
+
+      {status && (
+        <>
+          <div className="rs-grid-2" style={{ alignItems: 'start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: '13px', fontWeight: 600 }}>{st.dataDirHeading}</div>
+
+              <div className="rs-card-subtle" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="rs-mono" style={{ fontSize: '12.5px', wordBreak: 'break-all', color: 'var(--rs-text-primary)' }}>
+                  {status.activeDataDir}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>
+                  {st.sizeLabel(formatStorageBytes(status.dbSizeBytes, locale))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+                  <button
+                    type="button"
+                    className="rs-btn rs-btn-secondary rs-btn-sm"
+                    disabled={busyAction !== null}
+                    onClick={() => void handleOpenFolder('data_root')}
+                  >
+                    {st.openFolderBtn}
+                  </button>
+                  {!status.isDefaultDataDir && !status.isEnvOverridden && (
+                    <button
+                      type="button"
+                      className="rs-btn rs-btn-secondary rs-btn-sm"
+                      disabled={busyAction !== null}
+                      onClick={() => void handleMigrateDataDir({ resetToDefault: true, ifExists: 'error' })}
+                    >
+                      {st.resetDefaultBtn}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {status.isEnvOverridden ? (
+                <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>{st.envLockedNote}</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label htmlFor="rs-storage-data-dir" style={{ fontSize: '12.5px', fontWeight: 600 }}>
+                    {st.newDataDirLabel}
+                  </label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <input
+                      id="rs-storage-data-dir"
+                      type="text"
+                      className="rs-input"
+                      style={{ flex: 1, minWidth: 180 }}
+                      placeholder={st.newDataDirPlaceholder}
+                      value={dataDirDraft}
+                      onChange={(e) => setDataDirDraft(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="rs-btn rs-btn-secondary rs-btn-sm"
+                      disabled={busyAction !== null}
+                      onClick={() => void handlePickFolder((p) => setDataDirDraft(p), dataDirDraft || status.activeDataDir)}
+                    >
+                      {st.browseBtn}
+                    </button>
+                    <button
+                      type="button"
+                      className="rs-btn rs-btn-secondary rs-btn-sm"
+                      disabled={busyAction !== null || !dataDirDraft.trim()}
+                      onClick={() => void handleMigrateDataDir({ targetDir: dataDirDraft.trim(), ifExists: 'error' })}
+                    >
+                      {busyAction === 'migrate' ? st.applyingDirBtn : st.applyDirBtn}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>{st.dirKeepOldNote}</div>
+                </div>
+              )}
+
+              {conflictInfo && (
+                <div className="rs-banner rs-banner-amber" role="alert" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>
+                    {st.conflictTitle(conflictInfo.targetDir, conflictInfo.projectsCount, conflictInfo.ideasCount)}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="rs-btn rs-btn-primary rs-btn-sm"
+                      disabled={busyAction !== null}
+                      onClick={() =>
+                        void handleMigrateDataDir({
+                          targetDir: conflictInfo.resetToDefault ? undefined : conflictInfo.targetDir,
+                          resetToDefault: conflictInfo.resetToDefault,
+                          ifExists: 'use_existing',
+                        })
+                      }
+                    >
+                      {st.conflictUseExisting}
+                    </button>
+                    <button
+                      type="button"
+                      className="rs-btn rs-btn-secondary rs-btn-sm"
+                      disabled={busyAction !== null}
+                      onClick={() =>
+                        void handleMigrateDataDir({
+                          targetDir: conflictInfo.resetToDefault ? undefined : conflictInfo.targetDir,
+                          resetToDefault: conflictInfo.resetToDefault,
+                          ifExists: 'copy_overwrite',
+                        })
+                      }
+                    >
+                      {st.conflictOverwrite}
+                    </button>
+                    <button
+                      type="button"
+                      className="rs-btn rs-btn-ghost rs-btn-sm"
+                      disabled={busyAction !== null}
+                      onClick={() => setConflictInfo(null)}
+                    >
+                      {tr.common.cancel}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: '13px', fontWeight: 600 }}>{st.backupHeading}</div>
+
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', fontSize: '13px' }}>
+                <input
+                  type="checkbox"
+                  style={{ marginTop: 3 }}
+                  checked={status.autoBackupEnabled}
+                  disabled={busyAction !== null || status.isEnvOverridden}
+                  onChange={(e) => void handleToggleAutoBackup(e.target.checked)}
+                />
+                <span>{st.autoBackupToggle}</span>
+              </label>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <label htmlFor="rs-storage-external-dir" style={{ fontSize: '12.5px', fontWeight: 600 }}>
+                    {st.externalDirLabel}
+                  </label>
+                  {status.externalBackupDir && (
+                    <span className={`rs-badge ${status.externalBackupAccessible ? 'rs-badge-success' : 'rs-badge-warning'}`}>
+                      {status.externalBackupAccessible ? st.externalStatusOk : st.externalStatusMissing}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <input
+                    id="rs-storage-external-dir"
+                    type="text"
+                    className="rs-input"
+                    style={{ flex: 1, minWidth: 180 }}
+                    placeholder={st.externalDirPlaceholder}
+                    value={externalDirDraft}
+                    disabled={status.isEnvOverridden}
+                    onChange={(e) => setExternalDirDraft(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="rs-btn rs-btn-secondary rs-btn-sm"
+                    disabled={busyAction !== null || status.isEnvOverridden}
+                    onClick={() =>
+                      void handlePickFolder((p) => setExternalDirDraft(p), externalDirDraft || status.externalBackupDir || status.activeDataDir)
+                    }
+                  >
+                    {st.browseBtn}
+                  </button>
+                  <button
+                    type="button"
+                    className="rs-btn rs-btn-secondary rs-btn-sm"
+                    disabled={busyAction !== null || status.isEnvOverridden}
+                    onClick={() => void handleSaveExternalDir(externalDirDraft)}
+                  >
+                    {st.saveExternalBtn}
+                  </button>
+                </div>
+
+                {status.externalBackupDir && !status.isEnvOverridden && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {status.externalBackupAccessible && (
+                      <button
+                        type="button"
+                        className="rs-btn rs-btn-ghost rs-btn-sm"
+                        disabled={busyAction !== null}
+                        onClick={() => void handleOpenFolder('external_backup')}
+                      >
+                        {st.openFolderBtn}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="rs-btn rs-btn-ghost rs-btn-sm"
+                      disabled={busyAction !== null}
+                      onClick={() => void handleSaveExternalDir('')}
+                    >
+                      {st.clearExternalBtn}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="rs-btn rs-btn-primary rs-btn-sm"
+                  disabled={busyAction !== null}
+                  onClick={() => void handleCreateBackupNow()}
+                >
+                  {busyAction === 'backup' ? st.backingUpBtn : st.backupNowBtn}
+                </button>
+                <button
+                  type="button"
+                  className="rs-btn rs-btn-secondary rs-btn-sm"
+                  disabled={busyAction !== null}
+                  onClick={() => void handlePickRestoreFile()}
+                >
+                  {st.pickRestoreFileBtn}
+                </button>
+              </div>
+
+              <div style={{ fontSize: '12px', color: 'var(--rs-text-muted)' }}>
+                {st.lastBackupLabel(
+                  status.lastBackupAtUtc ? formatStorageTimestamp(status.lastBackupAtUtc, locale) : null,
+                )}
+              </div>
+            </div>
+          </div>
+
+          {pendingRestore && (
+            <div className="rs-banner rs-banner-warn" role="alert" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+              <div style={{ fontSize: '13.5px', fontWeight: 600 }}>
+                {st.restoreConfirmTitle(pendingRestore.filename)}
+              </div>
+              <div style={{ fontSize: '12.5px' }}>{st.restoreConfirmDesc}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="rs-btn rs-btn-primary rs-btn-sm"
+                  disabled={busyAction !== null}
+                  onClick={() => void handleConfirmRestore()}
+                >
+                  {busyAction === 'restore' ? st.restoringBtn : st.restoreConfirmBtn}
+                </button>
+                <button
+                  type="button"
+                  className="rs-btn rs-btn-secondary rs-btn-sm"
+                  disabled={busyAction !== null}
+                  onClick={() => setPendingRestore(null)}
+                >
+                  {tr.common.cancel}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4, borderTop: '1px solid var(--rs-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '13px', fontWeight: 600 }}>{st.recentBackupsHeading}</span>
+              <button
+                type="button"
+                className="rs-btn rs-btn-ghost rs-btn-sm"
+                disabled={busyAction !== null}
+                onClick={() => void handleOpenFolder('user_backups')}
+              >
+                {st.openBackupsFolderBtn}
+              </button>
+            </div>
+
+            {status.recentBackups.length === 0 ? (
+              <div style={{ fontSize: '12.5px', color: 'var(--rs-text-muted)' }}>{st.noBackupsYet}</div>
+            ) : (
+              <div className="rs-clean-list">
+                {status.recentBackups.slice(0, 5).map((item) => {
+                  const kindLabel =
+                    item.kind === 'auto'
+                      ? st.kindAuto
+                      : item.kind === 'pre_restore'
+                        ? st.kindPreRestore
+                        : st.kindManual;
+                  const locLabel =
+                    item.location === 'both'
+                      ? st.locationBoth
+                      : item.location === 'external'
+                        ? st.locationExternal
+                        : st.locationLocal;
+                  return (
+                    <div
+                      key={item.filename}
+                      className="rs-clean-row"
+                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                        <div className="rs-mono" style={{ fontSize: '12.5px', fontWeight: 600, wordBreak: 'break-all' }}>
+                          {item.filename}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: '12px', color: 'var(--rs-text-muted)' }}>
+                          <span>{formatStorageTimestamp(item.createdAtUtc, locale)}</span>
+                          <span>·</span>
+                          <span>{formatStorageBytes(item.sizeBytes, locale)}</span>
+                          <span className="rs-badge">{kindLabel}</span>
+                          <span className={`rs-badge ${item.location === 'both' ? 'rs-badge-success' : ''}`}>{locLabel}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="rs-btn rs-btn-secondary rs-btn-sm"
+                        disabled={busyAction !== null}
+                        onClick={() => setPendingRestore({ fullPath: item.fullPath, filename: item.filename })}
+                      >
+                        {st.restoreBtn}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+};
+
 const SystemSettingsForm: React.FC = () => {
   const {
     uiLanguage,
@@ -1329,6 +1907,8 @@ const SystemSettingsForm: React.FC = () => {
           </div>
         </section>
       </div>
+
+      <StorageAndBackupSection />
 
       <section className="rs-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>

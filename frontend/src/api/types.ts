@@ -77,6 +77,53 @@ export interface PurgeCacheResultDto {
   purgedAtUtc: string;
 }
 
+export interface StorageBackupItemDto {
+  filename: string;
+  fullPath: string;
+  sizeBytes: number;
+  createdAtUtc: string;
+  location: 'local' | 'external' | 'both';
+  kind: 'manual' | 'auto' | 'pre_restore';
+}
+
+export interface StorageStatusDto {
+  activeDataDir: string;
+  defaultDataDir: string;
+  isDefaultDataDir: boolean;
+  isEnvOverridden: boolean;
+  dbFilePath: string;
+  dbSizeBytes: number;
+  userBackupsDir: string;
+  externalBackupDir: string | null;
+  externalBackupAccessible: boolean;
+  autoBackupEnabled: boolean;
+  lastBackupAtUtc: string | null;
+  recentBackups: StorageBackupItemDto[];
+}
+
+export interface CreateBackupResultDto {
+  backupFilename: string;
+  localPath: string;
+  externalPath: string | null;
+  sizeBytes: number;
+  createdAtUtc: string;
+  externalWarning: string | null;
+  status: StorageStatusDto;
+}
+
+export interface MigrateDataDirResultDto {
+  previousDataDir: string;
+  activeDataDir: string;
+  modeUsed: 'copied' | 'copy_overwrite' | 'use_existing' | 'unchanged';
+  status: StorageStatusDto;
+}
+
+export interface RestoreBackupResultDto {
+  restoredFrom: string;
+  preRestoreBackupFilename: string;
+  status: StorageStatusDto;
+}
+
 export interface ProjectDto {
   id: string;
   name: string;

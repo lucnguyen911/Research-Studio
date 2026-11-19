@@ -35,7 +35,42 @@ export const TopBar: React.FC = () => {
   const locale = getActiveLocale(uiLanguage);
 
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(
+    () => typeof document !== 'undefined' && Boolean(document.fullscreenElement),
+  );
   const popoverWrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+    };
+  }, []);
+
+  const handleMinimizeWindow = () => {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      void document.exitFullscreen().catch(() => {});
+    }
+  };
+
+  const handleToggleMaximizeWindow = () => {
+    if (document.fullscreenElement) {
+      if (document.exitFullscreen) {
+        void document.exitFullscreen().catch(() => {});
+      }
+      return;
+    }
+    if (document.documentElement.requestFullscreen) {
+      void document.documentElement.requestFullscreen().catch(() => {});
+    }
+  };
+
+  const handleCloseWindow = () => {
+    window.close();
+  };
 
   useEffect(() => {
     if (!popoverOpen) return;
@@ -130,172 +165,249 @@ export const TopBar: React.FC = () => {
         <span className="rs-vox-wordmark">RESEARCH STUDIO</span>
       </button>
 
-      <div className="rs-topbar-spacer" />
+      <div className="rs-topbar-spacer" data-tauri-drag-region />
 
       <div className="rs-topbar-right">
-        {urgentAlert && (
-          <button
-            type="button"
-            className={`rs-topbar-alert ${urgentAlert.danger ? 'is-danger' : ''}`}
-            onClick={urgentAlert.onClick}
-          >
-            {urgentAlert.label}
-          </button>
-        )}
+        <div className="rs-topbar-controls">
+          {urgentAlert && (
+            <button
+              type="button"
+              className={`rs-topbar-alert ${urgentAlert.danger ? 'is-danger' : ''}`}
+              onClick={urgentAlert.onClick}
+            >
+              {urgentAlert.label}
+            </button>
+          )}
 
-        <div className="rs-topbar-popover-wrap" ref={popoverWrapRef}>
-          <button
-            type="button"
-            className="rs-topbar-capsule"
-            aria-expanded={popoverOpen}
-            aria-haspopup="dialog"
-            onClick={() => setPopoverOpen((v) => !v)}
-            title={t.quotaBtnTitle}
-          >
-            <span className={dotClass} aria-hidden="true" />
-            <span>{t.quotaBtnLabel}</span>
-            <svg {...iconProps} width={13} height={13} className="rs-capsule-chevron">
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </button>
+          <div className="rs-topbar-popover-wrap" ref={popoverWrapRef}>
+            <button
+              type="button"
+              className="rs-topbar-capsule"
+              aria-expanded={popoverOpen}
+              aria-haspopup="dialog"
+              onClick={() => setPopoverOpen((v) => !v)}
+              title={t.quotaBtnTitle}
+            >
+              <span className={dotClass} aria-hidden="true" />
+              <span>{t.quotaBtnLabel}</span>
+              <svg {...iconProps} width={14} height={14} className="rs-capsule-chevron">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
 
-          {popoverOpen && (
-            <div className="rs-topbar-popover" role="dialog" aria-label={t.quotaDialogAria}>
-              <div className="rs-popover-header">
-                <span className="rs-popover-title">{t.quotaTitle}</span>
-                <span className="rs-popover-meta" title={t.resetHintTitle}>
-                  {t.resetHint}
-                </span>
-              </div>
+            {popoverOpen && (
+              <div className="rs-topbar-popover" role="dialog" aria-label={t.quotaDialogAria}>
+                <div className="rs-popover-header">
+                  <span className="rs-popover-title">{t.quotaTitle}</span>
+                  <span className="rs-popover-meta" title={t.resetHintTitle}>
+                    {t.resetHint}
+                  </span>
+                </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                <div>
-                  <div className="rs-popover-kv-row" style={{ marginBottom: 4 }}>
-                    <span>{t.quotaSearch}</span>
-                    <strong className="rs-tabular">
-                      {quotaStatus.searchQueries.used} / {quotaStatus.searchQueries.limit}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                  <div>
+                    <div className="rs-popover-kv-row" style={{ marginBottom: 4 }}>
+                      <span>{t.quotaSearch}</span>
+                      <strong className="rs-tabular">
+                        {quotaStatus.searchQueries.used} / {quotaStatus.searchQueries.limit}
+                      </strong>
+                    </div>
+                    <div className="rs-progress-track">
+                      <div
+                        className={`rs-progress-fill ${quotaStatus.searchQueries.warning ? 'is-danger' : ''}`}
+                        style={{ width: `${searchPct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="rs-popover-kv-row" style={{ marginBottom: 4 }}>
+                      <span>{t.quotaData}</span>
+                      <strong className="rs-tabular">
+                        {quotaStatus.generalData.used.toLocaleString(locale)} /{' '}
+                        {quotaStatus.generalData.limit.toLocaleString(locale)}
+                      </strong>
+                    </div>
+                    <div className="rs-progress-track">
+                      <div
+                        className={`rs-progress-fill ${quotaStatus.generalData.warning ? 'is-danger' : ''}`}
+                        style={{ width: `${generalPct}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rs-popover-divider" />
+
+                <div className="rs-popover-kv">
+                  <div className="rs-popover-kv-row">
+                    <span>{t.localConnection}</span>
+                    <strong>
+                      {isBootstrapping ? t.statusChecking : backendOnline ? t.statusActive : t.statusOffline}
                     </strong>
                   </div>
-                  <div className="rs-progress-track">
-                    <div
-                      className={`rs-progress-fill ${quotaStatus.searchQueries.warning ? 'is-danger' : ''}`}
-                      style={{ width: `${searchPct}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="rs-popover-kv-row" style={{ marginBottom: 4 }}>
-                    <span>{t.quotaData}</span>
-                    <strong className="rs-tabular">
-                      {quotaStatus.generalData.used.toLocaleString(locale)} /{' '}
-                      {quotaStatus.generalData.limit.toLocaleString(locale)}
+                  <div className="rs-popover-kv-row">
+                    <span>{t.apiKeyLabel}</span>
+                    <strong>
+                      {systemSettings.apiKeyStatus === 'configured'
+                        ? t.apiKeyConfigured(systemSettings.maskedApiKey ?? '***')
+                        : systemSettings.apiKeyStatus === 'unreadable'
+                          ? t.apiKeyError
+                          : t.apiKeyMissing}
                     </strong>
                   </div>
-                  <div className="rs-progress-track">
-                    <div
-                      className={`rs-progress-fill ${quotaStatus.generalData.warning ? 'is-danger' : ''}`}
-                      style={{ width: `${generalPct}%` }}
-                    />
+                  <div className="rs-popover-kv-row">
+                    <span>{t.youtubeTermsLabel}</span>
+                    <strong>{systemSettings.legalConsentAccepted ? t.termsAccepted : t.termsNotAccepted}</strong>
                   </div>
                 </div>
-              </div>
 
-              <div className="rs-popover-divider" />
-
-              <div className="rs-popover-kv">
-                <div className="rs-popover-kv-row">
-                  <span>{t.localConnection}</span>
-                  <strong>
-                    {isBootstrapping ? t.statusChecking : backendOnline ? t.statusActive : t.statusOffline}
-                  </strong>
-                </div>
-                <div className="rs-popover-kv-row">
-                  <span>{t.apiKeyLabel}</span>
-                  <strong>
-                    {systemSettings.apiKeyStatus === 'configured'
-                      ? t.apiKeyConfigured(systemSettings.maskedApiKey ?? '***')
-                      : systemSettings.apiKeyStatus === 'unreadable'
-                        ? t.apiKeyError
-                        : t.apiKeyMissing}
-                  </strong>
-                </div>
-                <div className="rs-popover-kv-row">
-                  <span>{t.youtubeTermsLabel}</span>
-                  <strong>{systemSettings.legalConsentAccepted ? t.termsAccepted : t.termsNotAccepted}</strong>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="rs-btn rs-btn-secondary rs-btn-sm"
-                  style={{ flex: 1 }}
-                  onClick={() => {
-                    setPopoverOpen(false);
-                    navigate('system-settings');
-                  }}
-                >
-                  {t.settingsBtn}
-                </button>
-                {!systemSettings.legalConsentAccepted && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
                     type="button"
-                    className="rs-btn rs-btn-tinted rs-btn-sm"
+                    className="rs-btn rs-btn-secondary rs-btn-sm"
+                    style={{ flex: 1 }}
                     onClick={() => {
                       setPopoverOpen(false);
-                      setLegalModalOpen(true);
+                      navigate('system-settings');
                     }}
                   >
-                    {t.acceptTermsBtn}
+                    {t.settingsBtn}
                   </button>
-                )}
+                  {!systemSettings.legalConsentAccepted && (
+                    <button
+                      type="button"
+                      className="rs-btn rs-btn-tinted rs-btn-sm"
+                      onClick={() => {
+                        setPopoverOpen(false);
+                        setLegalModalOpen(true);
+                      }}
+                    >
+                      {t.acceptTermsBtn}
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        <div className="rs-vox-lang-capsule" title={t.languageAria}>
-          <span className="rs-vox-lang-label">{currentLanguageLabel}</span>
-          <svg {...iconProps} width={13} height={13} className="rs-capsule-chevron">
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-          <select
-            aria-label={t.languageAria}
-            className="rs-vox-lang-select"
-            value={uiLanguage}
-            onChange={(e) => setUiLanguage(e.target.value as UiLanguage)}
+          <div className="rs-vox-lang-capsule" title={t.languageAria}>
+            <span className="rs-vox-lang-label">{currentLanguageLabel}</span>
+            <svg {...iconProps} width={14} height={14} className="rs-capsule-chevron">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+            <select
+              aria-label={t.languageAria}
+              className="rs-vox-lang-select"
+              value={uiLanguage}
+              onChange={(e) => setUiLanguage(e.target.value as UiLanguage)}
+            >
+              <option value="vi">Tiếng Việt</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            className="rs-vox-icon-btn"
+            onClick={toggleTheme}
+            title={theme === 'light' ? t.switchToDark : t.switchToLight}
+            aria-label={theme === 'light' ? t.switchToDark : t.switchToLight}
           >
-            <option value="vi">Tiếng Việt</option>
-            <option value="en">English</option>
-          </select>
+            {theme === 'light' ? (
+              <svg {...iconProps} width={16} height={16} strokeWidth={1.9}>
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2" />
+                <path d="M12 20v2" />
+                <path d="m4.93 4.93 1.41 1.41" />
+                <path d="m17.66 17.66 1.41 1.41" />
+                <path d="M2 12h2" />
+                <path d="M20 12h2" />
+                <path d="m6.34 17.66-1.41 1.41" />
+                <path d="m19.07 4.93-1.41 1.41" />
+              </svg>
+            ) : (
+              <svg {...iconProps} width={16} height={16} strokeWidth={1.9}>
+                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+              </svg>
+            )}
+          </button>
+
+          <div className="rs-topbar-divider" aria-hidden="true" />
         </div>
 
-        <button
-          type="button"
-          className="rs-vox-icon-btn"
-          onClick={toggleTheme}
-          title={theme === 'light' ? t.switchToDark : t.switchToLight}
-          aria-label={theme === 'light' ? t.switchToDark : t.switchToLight}
-        >
-          {theme === 'light' ? (
-            <svg {...iconProps} width={15} height={15}>
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2" />
-              <path d="M12 20v2" />
-              <path d="m4.93 4.93 1.41 1.41" />
-              <path d="m17.66 17.66 1.41 1.41" />
-              <path d="M2 12h2" />
-              <path d="M20 12h2" />
-              <path d="m6.34 17.66-1.41 1.41" />
-              <path d="m19.07 4.93-1.41 1.41" />
+        <div className="rs-window-controls">
+          <button
+            type="button"
+            className="rs-window-btn"
+            onClick={handleMinimizeWindow}
+            title={t.windowMinimize}
+            aria-label={t.windowMinimize}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+              <path d="M0 5h10" stroke="currentColor" strokeWidth="1.2" />
             </svg>
-          ) : (
-            <svg {...iconProps} width={15} height={15}>
-              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+          </button>
+
+          <button
+            type="button"
+            className="rs-window-btn"
+            onClick={handleToggleMaximizeWindow}
+            title={isFullscreen ? t.windowRestore : t.windowMaximize}
+            aria-label={isFullscreen ? t.windowRestore : t.windowMaximize}
+          >
+            {isFullscreen ? (
+              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <path
+                  d="M2.5 2.5V1.3a.5.5 0 0 1 .5-.5h5.7a.5.5 0 0 1 .5.5V7a.5.5 0 0 1-.5.5H7.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.15"
+                />
+                <rect
+                  x="0.75"
+                  y="2.5"
+                  width="6.75"
+                  height="6.75"
+                  rx="0.6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.15"
+                />
+              </svg>
+            ) : (
+              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <rect
+                  x="0.75"
+                  y="0.75"
+                  width="8.5"
+                  height="8.5"
+                  rx="0.8"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                />
+              </svg>
+            )}
+          </button>
+
+          <button
+            type="button"
+            className="rs-window-btn rs-window-btn-close"
+            onClick={handleCloseWindow}
+            title={t.windowClose}
+            aria-label={t.windowClose}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+              <path
+                d="M1 1l8 8M9 1L1 9"
+                stroke="currentColor"
+                strokeWidth="1.25"
+                strokeLinecap="round"
+              />
             </svg>
-          )}
-        </button>
+          </button>
+        </div>
       </div>
     </header>
   );

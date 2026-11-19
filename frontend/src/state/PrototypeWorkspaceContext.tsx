@@ -377,6 +377,13 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
     return ok;
   }, [pushToast, syncFromBackend]);
 
+  const resetVolatileCachesAndSync = useCallback(async (): Promise<boolean> => {
+    setCachedVideosById({});
+    setManualFormatMap({});
+    setBreakoutByProject({});
+    return await syncFromBackend();
+  }, [syncFromBackend]);
+
   const setTheme = useCallback(
     (next: ThemeMode) => {
       applyThemeToDom(next);
@@ -1129,6 +1136,7 @@ export const PrototypeWorkspaceProvider: React.FC<{ children: React.ReactNode }>
         quotaStatus,
         syncQuotaStatus,
         refreshWorkspaceStatus,
+        resetVolatileCachesAndSync,
         projects,
         createProject,
         updateProject,

@@ -19,7 +19,7 @@ from app.core.config import (
 from app.core.errors import AppError
 from app.db.connection import read_db, run_db_sync, write_db
 from app.repositories import rss_repo, settings_repo, youtube_repo
-from app.services import quota_service, retention_service
+from app.services import quota_service, retention_service, storage_service
 
 logger = logging.getLogger("research_studio")
 
@@ -399,6 +399,10 @@ class LifespanScheduler:
             return
         self._running = True
         await self.run_ttl_purge_once()
+        try:
+            await run_db_sync(storage_service.run_auto_backup_if_due)
+        except Exception as exc:
+            logger.warning("Startup auto-backup check skipped due to error: %s", exc)
         self._purge_task = asyncio.create_task(self._purge_loop(), name="rs-ttl-purge-loop")
         self._refresh_task = asyncio.create_task(self._refresh_loop(), name="rs-auto-refresh-loop")
 

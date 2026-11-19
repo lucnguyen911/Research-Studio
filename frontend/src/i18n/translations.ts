@@ -62,6 +62,8 @@ export interface TranslationDict {
   sidebar: {
     mainNavAria: string;
     selectPlatformAria: string;
+    platformMenuAria: string;
+    platformComingSoonTag: string;
     platformTooltip: (name: string) => string;
     platforms: {
       youtube: string;
@@ -142,6 +144,10 @@ export interface TranslationDict {
     switchToDark: string;
     switchToLight: string;
     settingsBtn: string;
+    windowMinimize: string;
+    windowMaximize: string;
+    windowRestore: string;
+    windowClose: string;
   };
   overview: {
     title: string;
@@ -444,6 +450,53 @@ export interface TranslationDict {
     purgeConfirmTitle: string;
     purgeConfirmWarning: string;
     purgeConfirmBtn: string;
+    storage: {
+      sectionTitle: string;
+      loadingStatus: string;
+      loadFailed: string;
+      dataDirHeading: string;
+      defaultBadge: string;
+      customBadge: string;
+      envLockedNote: string;
+      sizeLabel: (formattedSize: string) => string;
+      openFolderBtn: string;
+      resetDefaultBtn: string;
+      newDataDirLabel: string;
+      newDataDirPlaceholder: string;
+      browseBtn: string;
+      applyDirBtn: string;
+      applyingDirBtn: string;
+      dirKeepOldNote: string;
+      conflictTitle: (dir: string, projectsCount: number, ideasCount: number) => string;
+      conflictUseExisting: string;
+      conflictOverwrite: string;
+      backupHeading: string;
+      autoBackupToggle: string;
+      externalDirLabel: string;
+      externalDirPlaceholder: string;
+      saveExternalBtn: string;
+      clearExternalBtn: string;
+      externalStatusOk: string;
+      externalStatusMissing: string;
+      backupNowBtn: string;
+      backingUpBtn: string;
+      pickRestoreFileBtn: string;
+      lastBackupLabel: (when: string | null) => string;
+      recentBackupsHeading: string;
+      openBackupsFolderBtn: string;
+      noBackupsYet: string;
+      locationLocal: string;
+      locationExternal: string;
+      locationBoth: string;
+      kindManual: string;
+      kindAuto: string;
+      kindPreRestore: string;
+      restoreBtn: string;
+      restoringBtn: string;
+      restoreConfirmTitle: (name: string) => string;
+      restoreConfirmDesc: string;
+      restoreConfirmBtn: string;
+    };
   };
   toasts: {
     errorPrefix: string;
@@ -463,6 +516,16 @@ export interface TranslationDict {
     loadIdeasError: string;
     cachePurged: (videosCount: number) => string;
     cachePurgeError: string;
+    storageConfigSaved: string;
+    storageConfigError: string;
+    storageBackupCreated: (filename: string) => string;
+    storageBackupError: string;
+    storageMigrated: (dir: string) => string;
+    storageMigrateError: string;
+    storageRestored: (filename: string) => string;
+    storageRestoreError: string;
+    storageOpenFolderError: string;
+    storagePickError: string;
     projectCreated: (name: string) => string;
     projectCreateError: string;
     projectUpdated: (name: string) => string;
@@ -547,6 +610,8 @@ const VI: TranslationDict = {
       instagramSoon: 'Instagram — Sắp ra mắt',
       xSoon: 'X — Sắp ra mắt',
     },
+    platformMenuAria: 'Danh sách nền tảng mạng xã hội',
+    platformComingSoonTag: 'Sắp ra mắt',
     areaAria: 'Chọn khu vực điều hướng',
     overviewArea: 'Tổng quan',
     overviewAreaTitle: 'Mở trang Tổng quan chung',
@@ -659,6 +724,10 @@ const VI: TranslationDict = {
     switchToDark: 'Chuyển sang giao diện tối',
     switchToLight: 'Chuyển sang giao diện sáng',
     settingsBtn: 'Cài đặt',
+    windowMinimize: 'Thu nhỏ',
+    windowMaximize: 'Phóng to',
+    windowRestore: 'Khôi phục kích thước',
+    windowClose: 'Đóng',
   },
   overview: {
     title: 'Tổng quan',
@@ -1012,6 +1081,55 @@ const VI: TranslationDict = {
     purgeConfirmTitle: 'Xóa toàn bộ dữ liệu YouTube tạm thời?',
     purgeConfirmWarning: 'Thao tác sẽ xóa sạch dữ liệu video và kênh tải từ YouTube. Toàn bộ Dự án, Ý tưởng, Từ khóa, Nhãn thủ công và nguồn RSS do bạn tạo vẫn giữ nguyên 100%.',
     purgeConfirmBtn: 'Xác nhận xóa',
+    storage: {
+      sectionTitle: 'Lưu trữ & Sao lưu dữ liệu',
+      loadingStatus: 'Đang kiểm tra thông tin lưu trữ...',
+      loadFailed: 'Không tải được thông tin thư mục lưu trữ.',
+      dataDirHeading: 'Thư mục dữ liệu chính',
+      defaultBadge: 'Mặc định (Ổ C)',
+      customBadge: 'Thư mục riêng',
+      envLockedNote: 'Đang cố định đường dẫn theo cấu hình khởi chạy.',
+      sizeLabel: (formattedSize) => `Dung lượng hiện tại: ${formattedSize}`,
+      openFolderBtn: 'Mở thư mục',
+      resetDefaultBtn: 'Về mặc định',
+      newDataDirLabel: 'Đổi sang ổ đĩa hoặc thư mục khác (khuyên dùng ngoài ổ C)',
+      newDataDirPlaceholder: 'Ví dụ: F:\\ResearchStudioData',
+      browseBtn: 'Chọn...',
+      applyDirBtn: 'Đổi thư mục',
+      applyingDirBtn: 'Đang chuyển...',
+      dirKeepOldNote: 'Dữ liệu ở thư mục trước luôn được giữ nguyên làm bản dự phòng, không tự xóa.',
+      conflictTitle: (dir, projectsCount, ideasCount) =>
+        `Thư mục "${dir}" đã có sẵn dữ liệu Research Studio (${projectsCount} dự án, ${ideasCount} ý tưởng). Bạn muốn xử lý thế nào?`,
+      conflictUseExisting: 'Dùng dữ liệu có sẵn ở đó',
+      conflictOverwrite: 'Chép đè dữ liệu hiện tại sang',
+      backupHeading: 'Sao lưu dự phòng & Khôi phục',
+      autoBackupToggle: 'Tự động sao lưu mỗi ngày khi mở ứng dụng (giữ 7 bản gần nhất, không kèm API Key)',
+      externalDirLabel: 'Thư mục sao lưu ngoài (Google Drive, OneDrive hoặc ổ khác)',
+      externalDirPlaceholder: 'Dán đường dẫn hoặc bấm Chọn... (không bắt buộc)',
+      saveExternalBtn: 'Lưu thư mục',
+      clearExternalBtn: 'Bỏ đặt',
+      externalStatusOk: 'Đã kết nối thư mục sao lưu ngoài',
+      externalStatusMissing: 'Chưa tìm thấy thư mục sao lưu ngoài đã cấu hình',
+      backupNowBtn: 'Sao lưu ngay',
+      backingUpBtn: 'Đang sao lưu...',
+      pickRestoreFileBtn: 'Chọn tệp khôi phục...',
+      lastBackupLabel: (when) => (when ? `Bản sao lưu gần nhất: ${when}` : 'Chưa có bản sao lưu người dùng nào.'),
+      recentBackupsHeading: 'Các bản sao lưu gần đây',
+      openBackupsFolderBtn: 'Mở kho sao lưu',
+      noBackupsYet: 'Chưa có bản sao lưu nào. Bấm "Sao lưu ngay" để tạo bản an toàn đầu tiên.',
+      locationLocal: 'Trên máy',
+      locationExternal: 'Thư mục ngoài',
+      locationBoth: 'Cả 2 nơi',
+      kindManual: 'Thủ công',
+      kindAuto: 'Tự động',
+      kindPreRestore: 'Trước khôi phục',
+      restoreBtn: 'Khôi phục',
+      restoringBtn: 'Đang khôi phục...',
+      restoreConfirmTitle: (name) => `Khôi phục dữ liệu từ "${name}"?`,
+      restoreConfirmDesc:
+        'Hệ thống sẽ tự động chụp lại dữ liệu hiện tại một bản trước khi nạp lại bản sao lưu. API Key đang lưu trên máy vẫn được giữ nguyên.',
+      restoreConfirmBtn: 'Xác nhận khôi phục',
+    },
   },
   toasts: {
     errorPrefix: 'Lỗi: ',
@@ -1031,6 +1149,16 @@ const VI: TranslationDict = {
     loadIdeasError: 'Không thể tải danh sách ý tưởng.',
     cachePurged: (videosCount) => `Đã xóa ${videosCount} video YouTube tạm thời. Dữ liệu của bạn được giữ 100%.`,
     cachePurgeError: 'Không thể xóa dữ liệu YouTube tạm thời.',
+    storageConfigSaved: 'Đã lưu cấu hình sao lưu dữ liệu.',
+    storageConfigError: 'Không lưu được cấu hình sao lưu.',
+    storageBackupCreated: (filename) => `Đã tạo bản sao lưu sạch: ${filename}`,
+    storageBackupError: 'Không thể tạo bản sao lưu.',
+    storageMigrated: (dir) => `Đã chuyển thư mục dữ liệu sang: ${dir}`,
+    storageMigrateError: 'Không thể chuyển thư mục dữ liệu.',
+    storageRestored: (filename) => `Đã khôi phục dữ liệu thành công từ ${filename}.`,
+    storageRestoreError: 'Không thể khôi phục từ bản sao lưu này.',
+    storageOpenFolderError: 'Không mở được thư mục trên máy.',
+    storagePickError: 'Không mở được hộp thoại chọn đường dẫn.',
     projectCreated: (name) => `Đã tạo dự án mới: ${name}`,
     projectCreateError: 'Không thể tạo dự án mới.',
     projectUpdated: (name) => `Đã lưu cấu hình dự án "${name}".`,
@@ -1121,6 +1249,8 @@ const EN: TranslationDict = {
       instagramSoon: 'Instagram — Coming soon',
       xSoon: 'X — Coming soon',
     },
+    platformMenuAria: 'Social platforms list',
+    platformComingSoonTag: 'Soon',
     areaAria: 'Select navigation area',
     overviewArea: 'Overview',
     overviewAreaTitle: 'Open Global Overview',
@@ -1233,6 +1363,10 @@ const EN: TranslationDict = {
     switchToDark: 'Switch to Dark Mode',
     switchToLight: 'Switch to Light Mode',
     settingsBtn: 'Settings',
+    windowMinimize: 'Minimize',
+    windowMaximize: 'Maximize',
+    windowRestore: 'Restore',
+    windowClose: 'Close',
   },
   overview: {
     title: 'Overview',
@@ -1586,6 +1720,55 @@ const EN: TranslationDict = {
     purgeConfirmTitle: 'Clear all temporary YouTube data?',
     purgeConfirmWarning: 'This deletes all cached YouTube video and channel metadata. Your Projects, Ideas, Keywords, Manual Labels, and RSS feeds remain 100% intact.',
     purgeConfirmBtn: 'Confirm Clear',
+    storage: {
+      sectionTitle: 'Data Storage & Backup',
+      loadingStatus: 'Checking storage details...',
+      loadFailed: 'Unable to load storage details.',
+      dataDirHeading: 'Primary Data Folder',
+      defaultBadge: 'Default Location',
+      customBadge: 'Custom Folder',
+      envLockedNote: 'Locked by launch environment configuration.',
+      sizeLabel: (formattedSize) => `Current size: ${formattedSize}`,
+      openFolderBtn: 'Open Folder',
+      resetDefaultBtn: 'Reset to Default',
+      newDataDirLabel: 'Move to another drive or folder',
+      newDataDirPlaceholder: 'Example: D:\\ResearchStudioData',
+      browseBtn: 'Browse...',
+      applyDirBtn: 'Apply Folder',
+      applyingDirBtn: 'Moving...',
+      dirKeepOldNote: 'Your previous folder stays untouched on disk as an extra safety copy.',
+      conflictTitle: (dir, projectsCount, ideasCount) =>
+        `"${dir}" already contains Research Studio data (${projectsCount} projects, ${ideasCount} ideas). How would you like to proceed?`,
+      conflictUseExisting: 'Use Existing Data There',
+      conflictOverwrite: 'Copy Current Data Over It',
+      backupHeading: 'Backups & Restore',
+      autoBackupToggle: 'Back up automatically once per day on startup (keeps latest 7, excludes API Key)',
+      externalDirLabel: 'External Backup Folder (Google Drive, OneDrive, or another drive)',
+      externalDirPlaceholder: 'Paste path or click Browse... (optional)',
+      saveExternalBtn: 'Save Folder',
+      clearExternalBtn: 'Clear',
+      externalStatusOk: 'External backup folder ready',
+      externalStatusMissing: 'Configured external backup folder is currently unreachable',
+      backupNowBtn: 'Back Up Now',
+      backingUpBtn: 'Backing up...',
+      pickRestoreFileBtn: 'Choose Backup File...',
+      lastBackupLabel: (when) => (when ? `Latest backup: ${when}` : 'No user backups created yet.'),
+      recentBackupsHeading: 'Recent Backups',
+      openBackupsFolderBtn: 'Open Backups Folder',
+      noBackupsYet: 'No backups yet. Click "Back Up Now" to create your first safe copy.',
+      locationLocal: 'Local',
+      locationExternal: 'External',
+      locationBoth: 'Both',
+      kindManual: 'Manual',
+      kindAuto: 'Auto',
+      kindPreRestore: 'Pre-restore',
+      restoreBtn: 'Restore',
+      restoringBtn: 'Restoring...',
+      restoreConfirmTitle: (name) => `Restore workspace data from "${name}"?`,
+      restoreConfirmDesc:
+        'A safety backup of your current workspace will be created automatically before restoring, and your saved API Key on this PC stays intact.',
+      restoreConfirmBtn: 'Confirm Restore',
+    },
   },
   toasts: {
     errorPrefix: 'Error: ',
@@ -1605,6 +1788,16 @@ const EN: TranslationDict = {
     loadIdeasError: 'Unable to load ideas.',
     cachePurged: (videosCount) => `Cleared ${videosCount} cached YouTube videos. Your own data remains 100% safe.`,
     cachePurgeError: 'Unable to clear temporary YouTube data.',
+    storageConfigSaved: 'Backup settings saved.',
+    storageConfigError: 'Unable to save backup settings.',
+    storageBackupCreated: (filename) => `Created clean backup: ${filename}`,
+    storageBackupError: 'Unable to create backup.',
+    storageMigrated: (dir) => `Switched active data folder to: ${dir}`,
+    storageMigrateError: 'Unable to switch data folder.',
+    storageRestored: (filename) => `Restored workspace data from ${filename}.`,
+    storageRestoreError: 'Unable to restore from this backup.',
+    storageOpenFolderError: 'Unable to open folder.',
+    storagePickError: 'Unable to open file or folder dialog.',
     projectCreated: (name) => `Created project: ${name}`,
     projectCreateError: 'Unable to create project.',
     projectUpdated: (name) => `Saved settings for "${name}".`,

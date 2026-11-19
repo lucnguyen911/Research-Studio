@@ -62,6 +62,7 @@ export interface PrototypeWorkspaceContextValue {
   quotaStatus: QuotaStatusDto;
   syncQuotaStatus: () => Promise<void>;
   refreshWorkspaceStatus: () => Promise<boolean>;
+  resetVolatileCachesAndSync: () => Promise<boolean>;
 
   projects: ProjectItem[];
   createProject: (input: {

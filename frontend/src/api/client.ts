@@ -4,6 +4,7 @@ import type {
   BreakoutVideosResponseDto,
   ChannelDetailResponseDto,
   CompetitorRefreshResponseDto,
+  CreateBackupResultDto,
   CreateIdeaPayload,
   CreateProjectPayload,
   DeleteProjectResultDto,
@@ -11,6 +12,7 @@ import type {
   GlobalOverviewDto,
   IdeaDto,
   KeywordDetailResponseDto,
+  MigrateDataDirResultDto,
   ProjectCompetitorsResponseDto,
   ProjectDto,
   ProjectKeywordDto,
@@ -19,6 +21,7 @@ import type {
   ProjectRefreshResponseDto,
   PurgeCacheResultDto,
   QuotaStatusDto,
+  RestoreBackupResultDto,
   RssArticleDto,
   RssFeedDto,
   RssPhrasesResponseDto,
@@ -28,6 +31,7 @@ import type {
   SchedulerStatusDto,
   SearchSessionDetailDto,
   SearchSessionDto,
+  StorageStatusDto,
   SystemSettingsDto,
   TrendsResponseDto,
   UpdateIdeaCorePayload,
@@ -227,6 +231,87 @@ export async function fetchQuotaStatus(signal?: AbortSignal): Promise<QuotaStatu
 export async function purgeYoutubeCacheApi(signal?: AbortSignal): Promise<PurgeCacheResultDto> {
   return apiRequest<PurgeCacheResultDto>('/api/v1/system/purge-youtube-cache', {
     method: 'POST',
+    signal,
+  });
+}
+
+export async function fetchStorageStatusApi(signal?: AbortSignal): Promise<StorageStatusDto> {
+  return apiRequest<StorageStatusDto>('/api/v1/system/storage', { signal });
+}
+
+export async function updateStorageBackupConfigApi(
+  payload: { autoBackupEnabled?: boolean; externalBackupDir?: string | null },
+  signal?: AbortSignal,
+): Promise<StorageStatusDto> {
+  return apiRequest<StorageStatusDto>('/api/v1/system/storage/backup-config', {
+    method: 'PUT',
+    body: payload,
+    signal,
+  });
+}
+
+export async function migrateDataDirApi(
+  payload: {
+    targetDir?: string;
+    ifExists?: 'error' | 'use_existing' | 'copy_overwrite';
+    resetToDefault?: boolean;
+  },
+  signal?: AbortSignal,
+): Promise<MigrateDataDirResultDto> {
+  return apiRequest<MigrateDataDirResultDto>('/api/v1/system/storage/migrate-data-dir', {
+    method: 'POST',
+    body: payload,
+    signal,
+  });
+}
+
+export async function createStorageBackupApi(signal?: AbortSignal): Promise<CreateBackupResultDto> {
+  return apiRequest<CreateBackupResultDto>('/api/v1/system/storage/backups/create', {
+    method: 'POST',
+    signal,
+  });
+}
+
+export async function restoreStorageBackupApi(
+  backupPath: string,
+  signal?: AbortSignal,
+): Promise<RestoreBackupResultDto> {
+  return apiRequest<RestoreBackupResultDto>('/api/v1/system/storage/backups/restore', {
+    method: 'POST',
+    body: { backupPath },
+    signal,
+  });
+}
+
+export async function openStorageFolderApi(
+  target: 'data_root' | 'user_backups' | 'external_backup',
+  signal?: AbortSignal,
+): Promise<{ openedPath: string }> {
+  return apiRequest<{ openedPath: string }>('/api/v1/system/storage/open-folder', {
+    method: 'POST',
+    body: { target },
+    signal,
+  });
+}
+
+export async function pickStorageFolderApi(
+  initialDir?: string | null,
+  signal?: AbortSignal,
+): Promise<{ selectedPath: string | null }> {
+  return apiRequest<{ selectedPath: string | null }>('/api/v1/system/storage/pick-folder', {
+    method: 'POST',
+    body: { initialDir: initialDir ?? null },
+    signal,
+  });
+}
+
+export async function pickStorageBackupFileApi(
+  initialDir?: string | null,
+  signal?: AbortSignal,
+): Promise<{ selectedPath: string | null }> {
+  return apiRequest<{ selectedPath: string | null }>('/api/v1/system/storage/pick-backup-file', {
+    method: 'POST',
+    body: { initialDir: initialDir ?? null },
     signal,
   });
 }

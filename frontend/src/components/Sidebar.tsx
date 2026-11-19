@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { getTranslations } from '../i18n/translations';
 import type { GlobalScreenId, ProjectScreenId, ScreenId } from '../prototype/types';
 import { useAppNavigation } from '../state/navigationStore';
@@ -29,12 +29,56 @@ const PROJECT_CHILD_IDS = new Set<ScreenId>(PROJECT_CHILD_MENU.map((item) => ite
 
 type NavIconId = ScreenId | 'collapse-left' | 'collapse-right' | 'plus';
 
+type PlatformId = 'youtube' | 'tiktok' | 'facebook' | 'instagram' | 'x';
+
+const PLATFORM_OPTIONS: Array<{ id: PlatformId; label: string; available: boolean }> = [
+  { id: 'youtube', label: 'YouTube', available: true },
+  { id: 'tiktok', label: 'TikTok', available: false },
+  { id: 'facebook', label: 'Facebook', available: false },
+  { id: 'instagram', label: 'Instagram', available: false },
+  { id: 'x', label: 'X', available: false },
+];
+
 const PlatformYouTubeIcon: React.FC = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <rect x="2" y="4.5" width="20" height="15" rx="4.2" fill="#DC2626" />
     <path d="M10 9l5.5 3-5.5 3V9Z" fill="#FFFFFF" />
   </svg>
 );
+
+const PlatformBadgeIcon: React.FC<{ id: PlatformId }> = ({ id }) => {
+  switch (id) {
+    case 'youtube':
+      return <PlatformYouTubeIcon />;
+    case 'tiktok':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
+        </svg>
+      );
+    case 'facebook':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+        </svg>
+      );
+    case 'instagram':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="5" />
+          <circle cx="12" cy="12" r="4" />
+          <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case 'x':
+      return (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M4 4l16 16" />
+          <path d="M20 4L4 20" />
+        </svg>
+      );
+  }
+};
 
 const SidebarIcon: React.FC<{ id: NavIconId; size?: number }> = ({ id, size = 15 }) => {
   const common = {
@@ -205,6 +249,30 @@ export const Sidebar: React.FC = () => {
     usePrototypeWorkspace();
   const t = getTranslations(uiLanguage).sidebar;
 
+  const [platformMenuOpen, setPlatformMenuOpen] = useState(false);
+  const platformWrapRef = useRef<HTMLDivElement | null>(null);
+  const isPlatformMenuOpen = platformMenuOpen && !sidebarCollapsed;
+
+  useEffect(() => {
+    if (!isPlatformMenuOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      if (platformWrapRef.current && !platformWrapRef.current.contains(event.target as Node)) {
+        setPlatformMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPlatformMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isPlatformMenuOpen]);
+
   const activeProjectId = currentEntry.projectId ?? projects[0]?.id ?? '';
 
   const activeChildScreenId: ScreenId | null = (() => {
@@ -282,31 +350,85 @@ export const Sidebar: React.FC = () => {
             <PlatformYouTubeIcon />
           </div>
         ) : (
-          <div className="rs-platform-box">
-            <span className="rs-platform-icon" aria-hidden="true">
-              <PlatformYouTubeIcon />
-            </span>
-            <select
-              id="rs-platform-select"
+          <div className="rs-platform-dropdown" ref={platformWrapRef}>
+            <button
+              type="button"
+              className={`rs-platform-trigger ${isPlatformMenuOpen ? 'is-open' : ''}`}
               aria-label={t.selectPlatformAria}
-              className="rs-select rs-select-compact rs-platform-select"
-              value="youtube"
-              onChange={() => undefined}
+              aria-haspopup="listbox"
+              aria-expanded={isPlatformMenuOpen}
+              onClick={() => setPlatformMenuOpen((v) => !v)}
             >
-              <option value="youtube">{t.platforms.youtube}</option>
-              <option value="tiktok" disabled>
-                {t.platforms.tiktokSoon}
-              </option>
-              <option value="facebook" disabled>
-                {t.platforms.facebookSoon}
-              </option>
-              <option value="instagram" disabled>
-                {t.platforms.instagramSoon}
-              </option>
-              <option value="x" disabled>
-                {t.platforms.xSoon}
-              </option>
-            </select>
+              <span className="rs-platform-badge is-youtube" aria-hidden="true">
+                <PlatformYouTubeIcon />
+              </span>
+              <span className="rs-platform-name">{t.platforms.youtube}</span>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="rs-platform-chevron"
+                aria-hidden="true"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+
+            {isPlatformMenuOpen && (
+              <div className="rs-platform-menu" role="listbox" aria-label={t.platformMenuAria}>
+                {PLATFORM_OPTIONS.map((platform) => {
+                  const isSelected = platform.id === 'youtube';
+                  return (
+                    <button
+                      key={platform.id}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      disabled={!platform.available}
+                      className={`rs-platform-option ${isSelected ? 'is-selected' : ''} ${
+                        !platform.available ? 'is-disabled' : ''
+                      }`}
+                      onClick={() => {
+                        if (platform.available) {
+                          setPlatformMenuOpen(false);
+                        }
+                      }}
+                    >
+                      <span
+                        className={`rs-platform-option-icon ${platform.id === 'youtube' ? 'is-youtube' : ''}`}
+                        aria-hidden="true"
+                      >
+                        <PlatformBadgeIcon id={platform.id} />
+                      </span>
+                      <span className="rs-platform-option-label">{platform.label}</span>
+                      {isSelected ? (
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="rs-platform-check"
+                          aria-hidden="true"
+                        >
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      ) : (
+                        <span className="rs-platform-soon-tag">{t.platformComingSoonTag}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -360,7 +482,10 @@ export const Sidebar: React.FC = () => {
                 currentEntry.screenId === 'global-overview' ? 'is-exact' : ''
               }`}
             >
-              {t.overviewArea}
+              <span className="rs-area-tab-icon">
+                <SidebarIcon id="global-overview" size={14} />
+              </span>
+              <span>{t.overviewArea}</span>
             </button>
             <button
               type="button"
@@ -371,7 +496,10 @@ export const Sidebar: React.FC = () => {
                 currentEntry.screenId === 'project-overview' ? 'is-exact' : ''
               }`}
             >
-              {t.projectArea}
+              <span className="rs-area-tab-icon">
+                <SidebarIcon id="project-overview" size={14} />
+              </span>
+              <span>{t.projectArea}</span>
             </button>
           </nav>
         )}
@@ -458,7 +586,10 @@ export const Sidebar: React.FC = () => {
         <button
           type="button"
           className="rs-collapse-btn"
-          onClick={toggleSidebar}
+          onClick={() => {
+            setPlatformMenuOpen(false);
+            toggleSidebar();
+          }}
           title={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
           aria-label={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
         >
