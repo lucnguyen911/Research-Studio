@@ -33,7 +33,7 @@ This is an evidence checklist, not a certification. Website publication alone do
 - [x] Local validation: four pages parsed without HTML5 errors; CSS rules/declarations parsed without syntax errors; all internal files and fragment targets resolve; six served HTML/assets returned HTTP 200 with exact byte matches. No sensitive-file or credential-pattern findings in `docs/`.
 - [x] Chrome checks: all four pages at 320, 390, 768 and 1440 CSS pixels; no horizontal overflow, console warnings/errors or third-party resource loads; navigation and feature-anchor clicks passed. Desktop homepage, mobile homepage and privacy layout visually inspected. This is not a complete accessibility certification or W3C conformance audit.
 - [x] Existing backend verification: 63 tests executed, 62 passed, one failure in `test_scheduler_and_ttl.SchedulerAndTtlTests.test_controlled_auto_refresh_priorities_caps_zero_search_and_clean_shutdown`, assertion `ideaVideosRenewed` expected 1, received 0. Backend and tests remain byte-for-byte unchanged from the baseline. No failure suppressed or fixed in this website task. Python compilation and isolated dependency integrity passed. No app frontend build was run because app frontend source/dependencies were not changed.
-- [ ] Record final deployment evidence in the delivery report; do not infer publication from source being present.
+- [x] GitHub Pages enabled from `main` → `/docs`, with HTTPS enforced. Initial deployment commit `44f3a0f701f6a0df4d9329f8ae82dd3827681ce2` reported `built`; homepage, four HTML paths and both assets returned HTTPS 200 and matched reviewed local bytes. Subsequent website/documentation changes require the final deployment recheck recorded in the delivery report.
 
 ## Desktop-app gaps requiring remediation or audit confirmation
 
@@ -54,7 +54,7 @@ This is an evidence checklist, not a certification. Website publication alone do
 - [ ] Demonstrate live external API behavior with authorized test credentials; unit tests use controlled inputs and do not establish live access.
 - [ ] Document proposed formulas, source fields, time intervals, minimum sample requirements, channel ownership boundaries, purpose, UI labels and proposed retention for advanced analytics, without enabling them.
 - [ ] Confirm current YouTube branding and API policy requirements in the client, not only on this website.
-- [ ] Verify public website HTTP success, HTTPS, correct content and all page URLs after deployment; record deployment commit and date.
+- [x] Initial public website HTTP/HTTPS/content verification completed on 20 November 2026 as recorded above. Final deployment recheck accompanies delivery.
 
 ## Approvals still pending
 
